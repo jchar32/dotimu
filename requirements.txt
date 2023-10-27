@@ -1,0 +1,5 @@
+pandas
+xarray
+matplotlib
+numpy>=1.20.3
+pynput==1.7.3

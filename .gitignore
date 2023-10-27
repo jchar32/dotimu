@@ -1,0 +1,6 @@
+src/sandbox.py
+src/dotapi/
+data/
+pychache/
+xsens/
+__pycache__/
