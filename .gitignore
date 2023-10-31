@@ -1,4 +1,4 @@
-src/sandbox.py
+src/sandbox/
 src/dotapi/
 data/
 pychache/
