@@ -9,7 +9,7 @@ def read_from_csv(path):
     return df.drop(index=0).reset_index(drop=True)
 
 
-def load_dot_file(filenames: str, datapath: str) -> Dict[str, Dot]:
+def load_dot_file(filenames: List[str] | str, datapath: str) -> Dict[str, Dot]:
     """
     Load data from .csv files into a dictionary.
 
