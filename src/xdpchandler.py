@@ -30,7 +30,7 @@ import movelladot_pc_sdk
 from collections import defaultdict
 from threading import Lock
 from pynput import keyboard
-from dotapi.user_settings import *
+from user_settings import *
 import time
 
 waitForConnections = True
@@ -495,3 +495,8 @@ class XdpcHandler(movelladot_pc_sdk.XsDotCallback):
         """
         self.__exportDone = True
         self._outputDeviceProgress()
+
+    def resetExportDone(self):
+        """Call this function to reset the flag "exportDone" to False. Otherwise, it will be set True once after the first file is exported and never goes false to allow for additional exports.
+        """
+        self.__exportDone = False
