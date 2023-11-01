@@ -86,6 +86,18 @@ def dir_exists_or_makeit(path: str) -> None:
     if not os.path.exists(path):
         os.makedirs(path)
 
+def dot_id_codes(dotio, numDevices: int = 5) -> list:
+    """Returns a list of all DOT sensor IDs.
+
+    Returns:
+        List[str]: A list of all DOT sensor IDs.
+    """
+    dotids = []
+    for i in range(numDevices):
+        temp = dotio.connectedUsbDots()[i].deviceId().toXsString()
+        dotids.append(temp)
+    return dotids
+
 def export_dot_data(dots2export: List[int] | str = "all", path: str = "data/") -> None:
     """
     Exports data from USB connected Dot devices to CSV files.
@@ -103,38 +115,59 @@ def export_dot_data(dots2export: List[int] | str = "all", path: str = "data/") -
         None
     """
     from xdpchandler import XdpcHandler
+    from config import sensorids
 
     if path != "data/":
         raise NotImplementedError("Only the default path is currently supported.")
     dir_exists_or_makeit(path)
 
+    # set up connections
     dotio = XdpcHandler()
     dotio.initialize()
     dotio.detectUsbDevices()
-
-    numDevices = len(dotio.detectedDots())
-
-    print(f"Number of Dots Found: {numDevices}")
     dotio.connectDots()  # connect to all found dot sensors
+
+    n_dots2export = len(dots2export)
+    numDevices_detected = len(dotio.detectedDots())
+    dotids_connected = dot_id_codes(dotio, numDevices_detected)
+
+    # ?? this is a bit of a hack to get the correct sensor codes that user wants to export.
+    # However, this should protect against the issue where the sensors connect in a different
+    # order and therefor are listed in a different order by dotio.connectedUsbDots().
+    dict_idx = [list(sensorids.values()).index(f"d{d}") for d in dots2export]  # get index of dots to export from sensorids dict
+    dots2export_codes = [list(sensorids.keys())[i] for i in dict_idx]  # get sensor codes for dots to export
 
     exportData = __dot_data_indices()  # get data channels to export
 
-    for deviceIndex in range(numDevices):
+    print(f"Number of Dots Found: {numDevices_detected}")
+    print(f"Exporting data for dots: {dots2export_codes}")
+
+    for deviceIndex, device_code in enumerate(dots2export_codes):  # range(len(dots2export_codes)):
+
         device = dotio.connectedUsbDots()[deviceIndex]  # specifiy which dot to use
         device_id = device.deviceId().toXsString()
-        for fileIndex in range(1, 9):
-            device.selectExportData(exportData)
-            csvFilename = (os.path.join(path, f"dot_{device_id}_{fileIndex}.csv"))
 
-            device.enableLogging(csvFilename)
-            device.startExportRecording(fileIndex)
+        if device_id == device_code:
+            # !! This if statement is not functioning as expected
+            # despite going True correctly, the for loop never runs.
+            # Is this an issue wiht the API again? maybe I cant specific the dot senor to export like this...?
+            for fileIndex in range(1, len(dotio.recordingCount())):
+                device.selectExportData(exportData)
+                csvFilename = (os.path.join(path, f"dot_{device_id}_{fileIndex}.csv"))
 
-            # wait until export is done
-            while not dotio.exportDone():
-                time.sleep(0.1)
+                device.enableLogging(csvFilename)
+                device.startExportRecording(fileIndex)
 
-            dotio.resetExportDone()  # reset the handler's global export done flag
+                # wait until export is done
+                while not dotio.exportDone():
+                    time.sleep(0.1)
 
-            device.disableLogging()
+                dotio.resetExportDone()  # reset the handler's global export done flag
+
+                device.disableLogging()
     dotio.cleanup()
     print("Done exporting data!")
+
+if __name__ == "__main__":
+    export_dot_data([1])
+    print("Done!")
