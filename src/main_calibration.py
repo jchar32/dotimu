@@ -14,19 +14,27 @@
 # file 6 = z up
 # file 7 = z down
 # file 8 = mag rotations
+# %%
 import file_io
 import calibration
 import os
 import pandas as pd
 from dot import Dot
 import numpy as np
+import pickle
 
+
+# %%
 # Specify data path for calibration files
-datapath = "../data/raw/calibrations/dot11_to_15/"
-filenames = os.listdir("../data/raw/calibrations/dot11_to_15/")
+datapath = "../data/raw/calibrations/"
+filenames = os.listdir("../data/raw/calibrations/")
 
-dotdata = file_io.read_dot_files(filenames, datapath)
-
+dotdata = file_io.load_dot_file(filenames, datapath)
+# # %%
 meandotdata = calibration.mean_data(dotdata)
-
+# # %%
 dot_calibs = calibration.get_calibration(meandotdata)
+
+# %%
+file_io.export_dot_data()
+
