@@ -3,6 +3,7 @@ import os
 import time
 from dot import Dot
 from typing import List, Dict
+import pickle
 
 def read_from_csv(path):
     df = pd.read_csv(path, header=0)
@@ -46,6 +47,16 @@ def load_dot_file(filenames: List[str] | str, datapath: str) -> Dict[str, Dot]:
         filenum += 1
     return dotdata
 
+
+def save_dot_calibrations(calibration_data: dict, path: str = "dot_calibrations.pkl") -> None:
+    with open('dot_calibrations.pkl', 'wb') as f:
+        pickle.dump(calibration_data, f)
+    print(f"Calibrations saved to {path}")
+
+
+def load_dot_calibrations(path: str = "dot_calibrations.pkl") -> Dict[str, pd.DataFrame]:
+    with open('dot_calibrations.pkl', 'rb') as f:
+        return pickle.load(f)
 
 def __dot_data_indices():
     """Specify each data channel to export from the DOT sensor.
