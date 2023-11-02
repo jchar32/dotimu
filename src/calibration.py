@@ -120,8 +120,8 @@ def ori_and_bias(data: dict) -> dict:
         correction_matrix = X[:3, :]
         accel_bias = X[3, :]
 
-        gyro_bias = cali_data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+        gyro_bias = cali_data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
 
-        calib_data[id] = Calibrations(correction_matrix, accel_bias, gyro_bias)
+        calib_data[id] = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
 
     return calib_data
