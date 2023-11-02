@@ -43,6 +43,9 @@ def load_dot_files(filenames: List[str] | str, datapath: str) -> Dict[str, Dot]:
         data_dict[filenum] = temp
         filenum += 1
         last_id = id
+
+        if id == len(filenames):
+            dotdata[int(dotid[-1])] = Dot(data_dict)
     return dotdata
 
 
