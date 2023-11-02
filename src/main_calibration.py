@@ -18,23 +18,22 @@
 import file_io
 import calibration
 import os
-import pandas as pd
-from dot import Dot
-import numpy as np
-import pickle
 
-
-# %%
 # Specify data path for calibration files
 datapath = "../data/raw/calibrations/"
 filenames = os.listdir("../data/raw/calibrations/")
 
-dotdata = file_io.load_dot_file(filenames, datapath)
-# # %%
-meandotdata = calibration.mean_data(dotdata)
-# # %%
-dot_calibs = calibration.get_calibration(meandotdata)
+dotdata = file_io.load_dot_files(filenames, datapath)
 
-# %%
-file_io.export_dot_data()
+# calculate mean signals for each sensor and orientation collected
+meandotdata = calibration.mean_dot_signals(dotdata)
 
+# calculate the calibration corrections for each sensor
+dot_calibs = calibration.ori_and_bias(meandotdata)
+
+# save the calibration corrections to a pickle file
+calib_path = "../data/processed/calibrations/"
+calib_filename = "dot_calibrations.pkl"
+file_io.save_dot_calibrations(dot_calibs, os.path.join(calib_path, calib_filename))
+
+dotdata_cal = calibration.apply(dotdata, dot_calibs)
