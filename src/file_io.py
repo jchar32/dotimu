@@ -85,6 +85,7 @@ def dir_exists_or_makeit(path: str) -> None:
         os.makedirs(path)
 
 def export_dot_data(dots2export: List[int] | str = "all", path: str = "data/") -> None:
+    # TODO: This is still not functioning as desired -> despite trying to index a given connected dot sensor, the api seems to skip over all the sensors and just moves to close the ports. A version is seperated into git branch: select-dots2export for further development of this.
     """
     Exports data from USB connected Dot devices to CSV files.
 
