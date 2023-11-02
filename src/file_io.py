@@ -27,24 +27,22 @@ def load_dot_file(filenames: List[str] | str, datapath: str) -> Dict[str, Dot]:
     data_dict = {}
     dotdata = {}
     filenum = 0
-    last_id = filenames[0].split("_")[0]
+    last_id = int(filenames[0].split("_")[0])
     dotid = [last_id]
 
     for i, file in enumerate(filenames):
         temp = read_from_csv(os.path.join(datapath, file))
-        id = file.split("_")[0]  # get the sensor ID
+        id = int(file.split("_")[0])  # get the sensor ID
 
         if id != last_id:
-            dotdata[dotid[-1]] = Dot(data_dict)
+            dotdata[int(dotid[-1])] = Dot(data_dict)
             data_dict = {}
             dotid.append(id)
             filenum = 0
-        if i == len(filenames) - 1:
-            data_dict[f"{filenum}"] = temp
-            dotdata[dotid[-1]] = Dot(data_dict)
 
-        data_dict[f"{filenum}"] = temp
+        data_dict[filenum] = temp
         filenum += 1
+        last_id = id
     return dotdata
 
 
