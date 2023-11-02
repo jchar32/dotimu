@@ -49,13 +49,13 @@ def load_dot_file(filenames: List[str] | str, datapath: str) -> Dict[str, Dot]:
 
 
 def save_dot_calibrations(calibration_data: dict, path: str = "dot_calibrations.pkl") -> None:
-    with open('dot_calibrations.pkl', 'wb') as f:
+    with open(path, 'wb') as f:
         pickle.dump(calibration_data, f)
     print(f"Calibrations saved to {path}")
 
 
 def load_dot_calibrations(path: str = "dot_calibrations.pkl") -> Dict[str, pd.DataFrame]:
-    with open('dot_calibrations.pkl', 'rb') as f:
+    with open(path, 'rb') as f:
         return pickle.load(f)
 
 def __dot_data_indices():
