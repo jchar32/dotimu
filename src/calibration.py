@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
-from typing import Dict
+import copy
 
 @dataclass
 class Calibrations:
@@ -32,13 +32,13 @@ def mean_dot_signals(dotdata: dict) -> dict:
 
 
 def ideal_ori() -> np.ndarray:
-    """the orientation matrix of a perfectly calibrated accelerometer.
+    """the orientation matrix of a perfectly calibrated accelerometer. This expects a sensor reading of + when pointing in the upward direction away from earths surface.
 
     Returns:
         np.ndarray: 3x3 matrix of the ideal orientation of the accelerometer.
     """
     return np.array(
-        [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]]
+        [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
     )
 
 
@@ -114,8 +114,12 @@ def ori_and_bias(data: dict) -> dict:
         accel_data = cali_data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
         accel_data = np.append(accel_data, np.ones((accel_data.shape[0], 1)), axis=1)
 
+        unit_correction = 1
+        if np.linalg.norm(accel_data[:, :-1], axis=1).mean() > 1.5:
+            unit_correction = 9.80994  # local gravity
+
         # calculate correction and bias in a least squares sense
-        X = leastsquare_calibration(accel_data[1:, :], ideal_ori())
+        X = leastsquare_calibration(accel_data[1:, :], ideal_ori() * unit_correction)
 
         correction_matrix = X[:3, :]
         accel_bias = X[3, :]
@@ -125,3 +129,21 @@ def ori_and_bias(data: dict) -> dict:
         calib_data[id] = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
 
     return calib_data
+
+def apply(dotdata: dict, cal: dict) -> dict:
+    calibrated_data = copy.deepcopy(dotdata)
+
+    for d in dotdata.keys():
+        for filenum in dotdata[d].data.keys():
+            # apply calibration
+            accel2cal = dotdata[d].data[filenum].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
+            corrected_accel = (
+                (cal[d].matrix @ accel2cal.T).T + cal[d].accel_bias
+            )
+            calibrated_data[d].data[filenum].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = corrected_accel
+
+            gyro2cal = dotdata[d].data[filenum].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
+            corrected_gyro = (gyro2cal + cal[d].gyro_bias)
+            calibrated_data[d].data[filenum].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = corrected_gyro.values
+
+    return calibrated_data
