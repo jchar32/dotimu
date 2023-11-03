@@ -26,25 +26,26 @@ def load_dot_files(filenames: List[str] | str, datapath: str) -> Dict[int, Dot]:
     """
     data_dict = {}
     dotdata = {}
-    filenum = 0
-    last_id = int(filenames[0].split("_")[0])
-    dotid = [last_id]
+    filecounter = 0
+    previous_id = int(filenames[0].split("_")[0])
+    final_id = int(filenames[-1].split("_")[0])
+    dotid = [previous_id]
 
     for i, file in enumerate(filenames):
         temp = read_from_csv(os.path.join(datapath, file))
         id = int(file.split("_")[0])  # get the sensor ID
 
-        if id != last_id:
+        if id != previous_id:
             dotdata[int(dotid[-1])] = Dot(data_dict)
             data_dict = {}
             dotid.append(id)
-            filenum = 0
+            filecounter = 0
 
-        data_dict[filenum] = temp
-        filenum += 1
-        last_id = id
-
-        if id == len(filenames):
+        data_dict[filecounter] = temp
+        filecounter += 1
+        previous_id = id
+        i += 1
+        if i == len(filenames) and id == final_id:
             dotdata[int(dotid[-1])] = Dot(data_dict)
     return dotdata
 
