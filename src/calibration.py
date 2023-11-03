@@ -130,7 +130,7 @@ def ori_and_bias(data: dict) -> dict:
 
     return calib_data
 
-def apply(dotdata: dict, cal: dict) -> dict:
+def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     calibrated_data = copy.deepcopy(dotdata)
 
     for d in dotdata.keys():
@@ -147,3 +147,64 @@ def apply(dotdata: dict, cal: dict) -> dict:
             calibrated_data[d].data[filenum].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = corrected_gyro.values
 
     return calibrated_data
+
+
+def sensor2body(trialsmap: dict, data: dict) -> dict:
+    """_summary_
+
+    Args:
+        trialsmap (dict): maping each calibration trial to a data file number. Mandatory movements for a 7 sensor (pelvis and bilateral foot, shank, thigh) are:
+            Npose
+            Lean forward at the hips
+            right leg air cycle (cycle leg as though on a bike)
+            left leg air cycle (cycle leg as though on a bike)
+
+        data (dict): dict of dot sensor data with keys being the sensor locations and values being the dot objects containing the sensor dataframes.
+        valid sensor location names:
+            lfoot, rfoot, lshank, rshank, lthigh, rthigh, pelvis
+
+    Returns:
+        dict: sensor to body calibration matrices for each sensor in same structure as data dict.
+    """
+
+    sensors = list(data.keys())
+
+    s2b = {}
+
+    # npose -> find gravity vector
+    for s in sensors:
+        temp = data[s].data[trialsmap["npose"]]
+        gvec = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+        s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
+        s2b[s][-1, :] = -1 * (gvec / np.linalg.norm(gvec))
+
+    # pelvis
+    temp = data["pelvis"].data[trialsmap["lean"]]
+    gvec_ap = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    gvec_ap /= np.linalg.norm(gvec_ap)
+
+    s2b["pelvis"][1, :] = np.cross(gvec_ap, s2b["pelvis"][-1, :])
+
+    s2b["pelvis"][0, :] = np.cross(s2b["pelvis"][1, :], s2b["pelvis"][-1, :])
+
+    # Functional Calibration for lower limbs
+    for s in sensors:
+        if s == "pelvis":
+            continue
+        if 'r' in s:
+            temp = data[s].data[trialsmap["rcycle"]]
+        else:
+            temp = data[s].data[trialsmap["lcycle"]]
+
+        gyr = temp[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+        _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
+
+        # flip ML axis for left side so all axes match
+        if 'l' in s and (evecs[-1, 0] > 0):
+            s2b[s][1, :] = -1 * evecs[:, 0].T
+        s2b[s][1, :] = evecs[:, 0].T
+
+        # AP axis
+        s2b[s][0, :] = np.cross(s2b[s][1, :], s2b[s][-1, :])
+
+    return s2b
