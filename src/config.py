@@ -16,3 +16,20 @@ sensorids = {
     "D422CD0079AF": "d14",
     "D422CD0079F2": "d15",
 }
+
+sensor_locations = {
+    "lfoot": 1,
+    "lshank": 2,
+    "lthigh": 3,
+    "pelvis": 4,
+    "rfoot": 5,
+    "rshank": 6,
+    "rthigh": 7
+}
+
+sensor2body_trials = {
+    "npose": 0,
+    "lean": 1,
+    "rcycle": 2,
+    "lcycle": 3
+}
