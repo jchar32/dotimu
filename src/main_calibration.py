@@ -14,26 +14,29 @@
 # file 6 = z up
 # file 7 = z down
 # file 8 = mag rotations
-# %%
-import file_io
-import calibration
-import os
+"""A script that can be run to perform sensor calibrations for the accelerometer and gyroscope signals from DOT sensors
+"""
 
-# Specify data path for calibration files
-datapath = "../data/raw/calibrations/"
-filenames = os.listdir("../data/raw/calibrations/")
+if __name__ == "__main__":
+    import file_io
+    import calibration
+    import os
 
-dotdata = file_io.load_dot_files(filenames, datapath)
+    # Specify data path for calibration files
+    datapath = "../data/raw/calibrations/"
+    filenames = os.listdir("../data/raw/calibrations/")
 
-# calculate mean signals for each sensor and orientation collected
-meandotdata = calibration.mean_dot_signals(dotdata)
+    dotdata = file_io.load_dot_files(filenames, datapath, ui=False)
 
-# calculate the calibration corrections for each sensor
-dot_calibs = calibration.ori_and_bias(meandotdata)
+    # calculate mean signals for each sensor and orientation collected
+    meandotdata = calibration.mean_dot_signals(dotdata)
 
-# save the calibration corrections to a pickle file
-calib_path = "../data/processed/calibrations/"
-calib_filename = "dot_calibrations.pkl"
-file_io.save_dot_calibrations(dot_calibs, os.path.join(calib_path, calib_filename))
+    # calculate the calibration corrections for each sensor
+    dot_calibs = calibration.ori_and_bias(meandotdata)
 
-dotdata_cal = calibration.apply(dotdata, dot_calibs)
+    # save the calibration corrections to a pickle file
+    calib_path = "../data/processed/calibrations/"
+    calib_filename = "dot_calibrations.pkl"
+    file_io.save_dot_calibrations(dot_calibs, os.path.join(calib_path, calib_filename))
+
+    dotdata_cal = calibration.apply_sensor_correction(dotdata, dot_calibs)
