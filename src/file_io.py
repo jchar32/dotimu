@@ -11,7 +11,7 @@ def read_from_csv(path):
     return df.drop(index=0).reset_index(drop=True)
 
 
-def load_dot_files(ui: bool = True, filenames: List[str] | str = "", datapath: str = "") -> Dict[int, Dot]:
+def load_dot_files(filenames: List[str] | str = "", datapath: str = "", ui: bool = True) -> Dict[int, Dot]:
     """
     Load data from .csv files into a dictionary.
 
@@ -52,7 +52,7 @@ def load_dot_files(ui: bool = True, filenames: List[str] | str = "", datapath: s
     dotid = [previous_id]
 
     for i, file in enumerate(files):
-        temp = read_from_csv(os.path.join(direc[0], file))
+        temp = read_from_csv(os.path.join(direc, file))
         id = int(file.split("_")[0])  # get the sensor ID
 
         if id != previous_id:
