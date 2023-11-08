@@ -498,5 +498,7 @@ class XdpcHandler(movelladot_pc_sdk.XsDotCallback):
 
     def resetExportDone(self):
         """Call this function to reset the flag "exportDone" to False. Otherwise, it will be set True once after the first file is exported and never goes false to allow for additional exports.
+
+        Thanks to Hod Kimhi (github/hkimhi) for helping identify the need for this function.
         """
         self.__exportDone = False
