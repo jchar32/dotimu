@@ -25,6 +25,18 @@ def load_dot_files(ui: bool = True, filenames: List[str] | str = "", datapath: s
 
     Returns:
         dotdata (Dict[str, Dot]): A dictionary where the keys are sensor IDs and the values are Dot objects containing.
+
+    IMPORTANT ASSUMPTIONS:
+    - the file names are prefixed with an integer corresponding to the real-life label of the sensor.
+
+    - The sensor names are suffixed with something that is unique to each instance of a collection. You can rename these if you wish, so long as all the sensors you collected with have the same suffix for each collection.
+    [sensor #]_[whatever you want]_[file id].csv
+
+        Dot sensors default to:
+        [sensor code]_[sensor id]_[date of collection].csv
+        sensor code = the label you have given it in the Movella app
+        sensor id = the unique id of the sensor
+        date of collection = the date the data was collected
     """
     if ui:
 
