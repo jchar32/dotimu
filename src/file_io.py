@@ -164,5 +164,18 @@ def export_dot_data(dots2export: List[int] | str = "all", path: str = "data/") -
     dotio.cleanup()
     print("Done exporting data!")
 
+
+def set_dot_location_names(locations, dotdata):
+
+    model_data = {}
+    for i, j in enumerate(locations.values()):
+        loc = list(locations.keys())[list(locations.values()).index(j)]
+        model_data[loc] = dotdata[j]
+    return model_data
+
+
 if __name__ == "__main__":
+    import config
     dotdata_raw = load_dot_files()
+    dot_locs = config.sensor_locations
+    model_data = set_dot_location_names(dot_locs, dotdata_raw)
