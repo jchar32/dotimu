@@ -39,7 +39,6 @@ def load_dot_files(ui: bool = True, filenames: List[str] | str = "", datapath: s
         date of collection = the date the data was collected
     """
     if ui:
-
         direc, files = get_path("*.csv")
     else:
         direc = datapath
