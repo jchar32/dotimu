@@ -5,3 +5,4 @@ data/
 pychache/
 xsens/
 __pycache__/
+.mypy_cache/
