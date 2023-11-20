@@ -18,13 +18,14 @@ sensorids = {
 }
 
 sensor_locations = {
+    # // this is a default order but can be changed by user.
     "lfoot": 1,
     "lshank": 2,
     "lthigh": 3,
     "pelvis": 4,
-    "rfoot": 5,
+    "rthigh": 5,
     "rshank": 6,
-    "rthigh": 7
+    "rfoot": 7,
 }
 
 sensor2body_trials = {
