@@ -153,6 +153,8 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
 
     return calibrated_data
 
+def apply_s2b(dotdata: dict, cal: dict) -> dict:
+    pass
 
 def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
     """Obtain functional calibration matrix for each sensor. The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to). Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
@@ -182,22 +184,8 @@ def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
         s2b[s] = nan_mat.copy()
         s2b[s][-1, :] = __set_vertical_axis(data[s].data[trialsmap["npose"]])
 
-        # temp = data[s].data[trialsmap["npose"]]
-        # gvec = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-        # s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
-        # s2b[s][-1, :] = -1 * (gvec / np.linalg.norm(gvec))
-
     # pelvis
     s2b["pelvis"][:, :] = set_pelvis_axes(data["pelvis"].data[trialsmap["lean"]], s2b["pelvis"][-1, :])
-
-
-    # temp = data["pelvis"].data[trialsmap["lean"]]
-    # gvec_ap = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    # gvec_ap /= np.linalg.norm(gvec_ap)
-
-    # s2b["pelvis"][1, :] = np.cross(gvec_ap, s2b["pelvis"][-1, :])
-
-    # s2b["pelvis"][0, :] = np.cross(s2b["pelvis"][1, :], s2b["pelvis"][-1, :])
 
     # Functional Calibration for lower limbs
     for s in sensors:
@@ -209,17 +197,6 @@ def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
         else:
             # temp = data[s].data[trialsmap["lcycle"]]
             s2b[s][:, :] = set_func_ml_axis(data[s].data[trialsmap["lcycle"]], s2b[s][-1, :], 'l')
-
-        # gyr = temp[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
-        # _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
-
-        # # flip ML axis for left side so all axes match
-        # if 'l' in s and (evecs[-1, 0] > 0):
-        #     s2b[s][1, :] = -1 * evecs[:, 0].T
-        # s2b[s][1, :] = evecs[:, 0].T
-
-        # # AP axis
-        # s2b[s][0, :] = np.cross(s2b[s][1, :], s2b[s][-1, :])
 
     return s2b
 
