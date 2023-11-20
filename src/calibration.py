@@ -94,6 +94,11 @@ def leastsquare_calibration(measured: np.ndarray, ideal: np.ndarray) -> np.ndarr
     """
     return np.linalg.inv(measured.T @ measured) @ measured.T @ ideal
 
+def accel_unit_correction(accel_data: np.ndarray) -> float:
+    unit_correction = 1
+    if np.linalg.norm(accel_data[:, :-1], axis=1).mean() > 1.5:
+        unit_correction = 9.80994  # local gravity
+    return unit_correction
 
 def ori_and_bias(data: dict) -> dict:
     """Gather the specific files for each calibration orientation (xup, yup ect) then calculate the correction matrix and bias for each sensor.
@@ -149,15 +154,15 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     return calibrated_data
 
 
-def sensor2body(trialsmap: dict, data: dict) -> dict:
-    """_summary_
+def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
+    """Obtain functional calibration matrix for each sensor. The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to). Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
 
     Args:
         trialsmap (dict): maping each calibration trial to a data file number. Mandatory movements for a 7 sensor (pelvis and bilateral foot, shank, thigh) are:
-            Npose
-            Lean forward at the hips
-            right leg air cycle (cycle leg as though on a bike)
-            left leg air cycle (cycle leg as though on a bike)
+            1. Npose
+            2. Lean forward at the hips
+            3. Right leg air cycle (cycle leg as though on a bike)
+            4. Left leg air cycle (cycle leg as though on a bike)
 
         data (dict): dict of dot sensor data with keys being the sensor locations and values being the dot objects containing the sensor dataframes.
         valid sensor location names:
@@ -172,39 +177,84 @@ def sensor2body(trialsmap: dict, data: dict) -> dict:
     s2b = {}
 
     # npose -> find gravity vector
+    nan_mat = np.full((3, 3), dtype=float, fill_value=np.nan)
     for s in sensors:
-        temp = data[s].data[trialsmap["npose"]]
-        gvec = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-        s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
-        s2b[s][-1, :] = -1 * (gvec / np.linalg.norm(gvec))
+        s2b[s] = nan_mat.copy()
+        s2b[s][-1, :] = __set_vertical_axis(data[s].data[trialsmap["npose"]])
+
+        # temp = data[s].data[trialsmap["npose"]]
+        # gvec = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+        # s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
+        # s2b[s][-1, :] = -1 * (gvec / np.linalg.norm(gvec))
 
     # pelvis
-    temp = data["pelvis"].data[trialsmap["lean"]]
-    gvec_ap = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    gvec_ap /= np.linalg.norm(gvec_ap)
+    s2b["pelvis"][:, :] = set_pelvis_axes(data["pelvis"].data[trialsmap["lean"]], s2b["pelvis"][-1, :])
 
-    s2b["pelvis"][1, :] = np.cross(gvec_ap, s2b["pelvis"][-1, :])
 
-    s2b["pelvis"][0, :] = np.cross(s2b["pelvis"][1, :], s2b["pelvis"][-1, :])
+    # temp = data["pelvis"].data[trialsmap["lean"]]
+    # gvec_ap = temp[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    # gvec_ap /= np.linalg.norm(gvec_ap)
+
+    # s2b["pelvis"][1, :] = np.cross(gvec_ap, s2b["pelvis"][-1, :])
+
+    # s2b["pelvis"][0, :] = np.cross(s2b["pelvis"][1, :], s2b["pelvis"][-1, :])
 
     # Functional Calibration for lower limbs
     for s in sensors:
         if s == "pelvis":
             continue
         if 'r' in s:
-            temp = data[s].data[trialsmap["rcycle"]]
+            # temp = data[s].data[trialsmap["rcycle"]]
+            s2b[s][:, :] = set_func_ml_axis(data[s].data[trialsmap["rcycle"]], s2b[s][-1, :], 'r')
         else:
-            temp = data[s].data[trialsmap["lcycle"]]
+            # temp = data[s].data[trialsmap["lcycle"]]
+            s2b[s][:, :] = set_func_ml_axis(data[s].data[trialsmap["lcycle"]], s2b[s][-1, :], 'l')
 
-        gyr = temp[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
-        _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
+        # gyr = temp[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+        # _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
 
-        # flip ML axis for left side so all axes match
-        if 'l' in s and (evecs[-1, 0] > 0):
-            s2b[s][1, :] = -1 * evecs[:, 0].T
-        s2b[s][1, :] = evecs[:, 0].T
+        # # flip ML axis for left side so all axes match
+        # if 'l' in s and (evecs[-1, 0] > 0):
+        #     s2b[s][1, :] = -1 * evecs[:, 0].T
+        # s2b[s][1, :] = evecs[:, 0].T
 
-        # AP axis
-        s2b[s][0, :] = np.cross(s2b[s][1, :], s2b[s][-1, :])
+        # # AP axis
+        # s2b[s][0, :] = np.cross(s2b[s][1, :], s2b[s][-1, :])
 
     return s2b
+
+def __set_vertical_axis(data):
+
+    gvec = data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    gvec /= np.linalg.norm(gvec)
+
+    return -1 * gvec
+
+def set_pelvis_axes(data, pelvis_vert_axis):
+    # temp = data["pelvis"].data[trialsmap["lean"]]
+    gvec_ap = data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    ap_temp = gvec_ap / np.linalg.norm(gvec_ap)
+    ml = np.cross(ap_temp, pelvis_vert_axis)
+    ml /= np.linalg.norm(ml)
+    ap = np.cross(ml, pelvis_vert_axis)
+    ap /= np.linalg.norm(ap)
+    return np.vstack([ap, ml, pelvis_vert_axis])
+
+def set_func_ml_axis(data, vertical_axis, side):
+
+    # eigvector decomp to get gyr signal variance. Largest variance is ML axis
+    gyr = data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+    _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
+
+    ml_axis = flip_left_ml_axis(evecs[:, 0].T, side)
+
+    ap_axis = np.cross(ml_axis, vertical_axis)
+    ap_axis /= np.linalg.norm(ap_axis)
+
+    return np.vstack([ap_axis, ml_axis, vertical_axis])
+
+def flip_left_ml_axis(evecs, side):
+    # flip ML axis for left side so all axis conventions match Right to Left
+    if side == 'l' and (evecs[-1] > 0):
+        evecs *= -1
+    return evecs
