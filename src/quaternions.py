@@ -1,5 +1,5 @@
 import numpy as np
-
+from warnings import warn
 # TODO: This file could be combined with similar functions for rotations and potentially packaged separately. However, this has be done by people over and over again.
 
 
@@ -99,7 +99,7 @@ def product(q, p, scalarLast=False):
     Returns:
         ndarray: product of q and p
     """
-
+    # TODO: should vectorize this.
     if scalarLast:
         q0, qx, qy, qz = to_scalar_first(q)
         p0, px, py, pz = to_scalar_first(p)
@@ -201,12 +201,12 @@ def from_rotmat(R: np.ndarray):
         raise ValueError("R must be a 2 or 3 dimensional matrix")
     if R.shape[-2:] != (3, 3):
         raise ValueError(f"Function expects a 3x3 or Nx3x3 matrix. You passed a {R.shape} matrix.")
-    if not np.allclose(R @ R.T, np.identity(R.shape[0])):
-        raise ValueError("R is not orthogonal")
+    if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-6):
+        warn("R is not orthogonal")
 
     num_quats = R.shape[0] if R.ndim == 3 else 1
 
-    q = np.empty((num_quats, 4))
+    q = np.empty((4))
     trace = np.trace(R)
 
     if trace > 0.0:
@@ -235,7 +235,7 @@ def from_rotmat(R: np.ndarray):
             q[2] = 0.5 / sqrt_trace * (R[2, 1] + R[1, 2])
             q[3] = 0.5 * sqrt_trace
 
-    q /= np.linalg.norm(q, axis=1, keepdims=True)
+    q /= np.linalg.norm(q, axis=0, keepdims=True)
     return q
 
 def from_axis_angle(ax: np.ndarray, angleFirst=False):
