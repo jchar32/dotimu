@@ -259,4 +259,3 @@ def from_axis_angle(ax: np.ndarray, angleFirst=False):
     q[:, 0] = np.cos(angle / 2)
     q[:, 1:] = np.sin(angle / 2) * ax / np.linalg.norm(ax, axis=1, keepdims=True)
     return q
-
