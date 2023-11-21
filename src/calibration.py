@@ -2,9 +2,11 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 import copy
+import quaternions as quat
+
 
 @dataclass
-class Calibrations:
+class sensorCalibration:
     matrix: np.ndarray
     accel_bias: np.ndarray
     gyro_bias: np.ndarray
@@ -131,7 +133,7 @@ def ori_and_bias(data: dict) -> dict:
 
         gyro_bias = cali_data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
 
-        calib_data[id] = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
+        calib_data[id] = sensorCalibration(correction_matrix, accel_bias, gyro_bias[0, :])
 
     return calib_data
 
@@ -153,8 +155,53 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
 
     return calibrated_data
 
-def apply_s2b(dotdata: dict, cal: dict) -> dict:
-    pass
+
+def apply_s2b(model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False):
+    """applies a sensor to body calibration matrix to the dot sensor data. Assumes the sensor data is in the sensor frame and the calibration matrix is from the sensor frame to the body frame. The result is the sensor data in the body frame.
+
+    Args:
+        model_data (dict): keys are sensor locations and values are dot objects containing the sensor dataframes.
+        s2b (dict): keys are sensor locations, values are 3x3 rotation matrices from sensor to body.
+        accel (bool, optional): calibrate accelerometer data. Defaults to True.
+        gyro (bool, optional): calibrate gyro data. Defaults to True.
+        mag (bool, optional): calibrate mag data. Defaults to True.
+        quaternion (bool, optional): calibrate quaternion data. Defaults to False.
+
+    Raises:
+        ValueError: must have equal number of sensor to body calibration matrices and sensor data arrays
+
+    Returns:
+        dict: calibrated data in same structure as input (model_data)
+    """
+
+    calibrated_data = copy.deepcopy(model_data)
+
+    num_sensors = len(model_data.keys())
+    if num_sensors != len(s2b.keys()):
+        raise ValueError(f"Mismatch between number of sensors: {num_sensors} and number of sensor to body calibration matrices: {len(s2b.keys())}.")
+
+    for s in model_data.keys():
+        for t in model_data[s].data.keys():
+            if accel:
+                acc_data = calibrated_data[s].data[t].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy() @ s2b[s].T
+                calibrated_data[s].data[t].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = acc_data
+            if gyro:
+                gyro_data = calibrated_data[s].data[t].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy() @ s2b[s].T
+                calibrated_data[s].data[t].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = gyro_data
+            if mag:
+                mag_data = calibrated_data[s].data[t].loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy() @ s2b[s].T
+                calibrated_data[s].data[t].loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag_data
+
+            if quaternion and 'Quat_W' in calibrated_data[s].data[t].columns:
+                Rq = quat.from_rotmat(s2b[s])
+                ori = calibrated_data[s].data[t].loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]].to_numpy()
+
+                # looped since product function is not vectorized
+                for i in range(ori.shape[0]):
+                    ori[i, :] = quat.product(Rq, ori[i, :])
+
+                calibrated_data[s].data[t].loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]] = ori
+    return calibrated_data
 
 def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
     """Obtain functional calibration matrix for each sensor. The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to). Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
