@@ -6,7 +6,7 @@ import quaternions as quat
 
 
 @dataclass
-class sensorCalibration:
+class Calibrations:
     matrix: np.ndarray
     accel_bias: np.ndarray
     gyro_bias: np.ndarray
@@ -133,7 +133,7 @@ def ori_and_bias(data: dict) -> dict:
 
         gyro_bias = cali_data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
 
-        calib_data[id] = sensorCalibration(correction_matrix, accel_bias, gyro_bias[0, :])
+        calib_data[id] = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
 
     return calib_data
 
