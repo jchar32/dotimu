@@ -109,7 +109,7 @@ def product(q, p, scalarLast=False):
 
     prod = np.array(
         [
-            q0 * q0 - qx * px - qy * py - qz * pz,
+            q0 * p0 - qx * px - qy * py - qz * pz,
             q0 * px + qx * p0 + qy * pz - qz * py,
             q0 * py - qx * pz + qy * p0 + qz * px,
             q0 * pz + qx * py - qy * px + qz * p0,
