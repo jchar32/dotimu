@@ -1,9 +1,11 @@
-import scipy.signal as signal
 from typing import List
-import pandas as pd
-import numpy as np
-from scipy.fft import rfft, rfftfreq
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy import signal
+from scipy.fft import rfft, rfftfreq
+
 
 def _get_filter_coefs(type: str, cutoff: float | List[float], fs: int, order: int = 2):
     """
@@ -23,7 +25,8 @@ def _get_filter_coefs(type: str, cutoff: float | List[float], fs: int, order: in
     return b, a
 
 
-def filter_signal(data: pd.Series | pd.DataFrame | np.ndarray, cutoff: float | List[float], fs: int = 100, type: str = "low", order: int = 2):
+def filter_signal(data: pd.Series | pd.DataFrame | np.ndarray, cutoff: float | List[float], fs: int = 100, type: str = "low", order: int = 2,
+                  return_as: str = "same"):
     """
     Apply a digital filter to the data.
 
@@ -33,14 +36,25 @@ def filter_signal(data: pd.Series | pd.DataFrame | np.ndarray, cutoff: float | L
         fs (int, optional): The sampling rate. Defaults to 100.
         type (str, optional): The type of the filter. Can be "low" or "high". Defaults to "low".
         order (int, optional): The order of the filter. Defaults to 2.
-
+        return_as (str): [NotImplemented] The type of object to return. Can be "same", "ndarray", "pd.dataframe", or "pd.series". Defaults to "same".
     Returns:
-        The filtered data in the same form as the input.
+        np.ndarray: The filtered data in the same form as the input.
     """
     b, a = _get_filter_coefs(type=type, cutoff=cutoff, fs=fs, order=order)
 
     # assumes time axis is 0
-    return signal.filtfilt(b, a, data, axis=0)
+    filtered_signal = signal.filtfilt(b, a, data, axis=0)  # returns as np.ndarray by default
+
+    # TODO: consider implementing a return_as option to return the data in a different format (pd.dataframe, pd.series, or np.ndarray)
+    # if return_as == "same":
+    #     if isinstance(data, pd.DataFrame):
+    #         filtered_signal = pd.DataFrame(filtered_signal, index=data.index, columns=data.columns)
+    #     elif isinstance(data, pd.Series):
+    #         filtered_signal = pd.Series(filtered_signal, index=data.index)
+    # elif return_as == "pd.dataframe":
+    #     filtered_signal = pd.DataFrame(filtered_signal, index=data.index, columns=data.columns)
+
+    return filtered_signal
 
 
 def power_freq_spectrum(data: pd.Series | pd.DataFrame | np.ndarray, plotme: bool = False, fs: int = 120):
