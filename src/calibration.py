@@ -1,7 +1,9 @@
+import copy
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
-import copy
+
 import quaternions as quat
 
 
@@ -96,11 +98,6 @@ def leastsquare_calibration(measured: np.ndarray, ideal: np.ndarray) -> np.ndarr
     """
     return np.linalg.inv(measured.T @ measured) @ measured.T @ ideal
 
-def accel_unit_correction(accel_data: np.ndarray) -> float:
-    unit_correction = 1
-    if np.linalg.norm(accel_data[:, :-1], axis=1).mean() > 1.5:
-        unit_correction = 9.80994  # local gravity
-    return unit_correction
 
 def ori_and_bias(data: dict) -> dict:
     """Gather the specific files for each calibration orientation (xup, yup ect) then calculate the correction matrix and bias for each sensor.
