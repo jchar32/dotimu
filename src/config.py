@@ -34,3 +34,7 @@ sensor2body_trials = {
     "rcycle": 2,
     "lcycle": 3
 }
+
+gait_trials = {
+    "numbers": [5, 6, 7, 8, 9]
+}
