@@ -238,7 +238,7 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
         s2b[s][-1, :] = __set_vertical_axis(data[s][trialsmap["npose"]])
 
     # pelvis
-    s2b["pelvis"][:, :] = set_pelvis_axes(data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :])
+    s2b["pelvis"][:, :] = __set_pelvis_axes(data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :])
 
     # Functional Calibration for lower limbs
     for s in sensors:
@@ -246,10 +246,10 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
             continue
         if "r" in s:
             # temp = data[s].data[trialsmap["rcycle"]]
-            s2b[s][:, :] = set_func_ml_axis(data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r")
+            s2b[s][:, :] = __set_func_ml_axis(data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r")
         else:
             # temp = data[s].data[trialsmap["lcycle"]]
-            s2b[s][:, :] = set_func_ml_axis(data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l")
+            s2b[s][:, :] = __set_func_ml_axis(data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l")
 
     return s2b
 
@@ -261,7 +261,7 @@ def __set_vertical_axis(data):
     return -1 * gvec
 
 
-def set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
+def __set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
     # temp = data["pelvis"].data[trialsmap["lean"]]
     ap_temp = forward_lean_data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
     ap_temp /= np.linalg.norm(ap_temp)
@@ -274,12 +274,12 @@ def set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
     return np.vstack([ap, ml, infsup])
 
 
-def set_func_ml_axis(data, vertical_axis, side):
+def __set_func_ml_axis(data, vertical_axis, side):
     # eigvector decomp to get gyr signal variance. Largest variance is ML axis
     gyr = data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
     _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
 
-    ml_axis = flip_left_ml_axis(evecs[:, 0].T, side)
+    ml_axis = __flip_left_ml_axis(evecs[:, 0].T, side)
 
     ap_axis = np.cross(ml_axis, vertical_axis)
     ap_axis /= np.linalg.norm(ap_axis)
@@ -288,7 +288,7 @@ def set_func_ml_axis(data, vertical_axis, side):
     return np.vstack([ap_axis, ml_axis, infsup])
 
 
-def flip_left_ml_axis(evecs, side):
+def __flip_left_ml_axis(evecs, side):
     # flip ML axis for left side so all axis conventions match Right to Left
     if side == "l" and (evecs[-1] > 0):
         evecs *= -1
