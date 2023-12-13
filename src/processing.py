@@ -21,12 +21,23 @@ def _get_filter_coefs(type: str, cutoff: float | List[float], fs: int, order: in
         tuple: The numerator (b) and denominator (a) polynomials of the IIR filter.
     """
 
-    b, a = signal.butter(order, cutoff, type, fs=fs,)
+    b, a = signal.butter(
+        order,
+        cutoff,
+        type,
+        fs=fs,
+    )
     return b, a
 
 
-def filter_signal(data: pd.Series | pd.DataFrame | np.ndarray, cutoff: float | List[float], fs: int = 100, type: str = "low", order: int = 2,
-                  return_as: str = "same"):
+def filter_signal(
+    data: pd.Series | pd.DataFrame | np.ndarray,
+    cutoff: float | List[float],
+    fs: int = 100,
+    type: str = "low",
+    order: int = 2,
+    return_as: str = "same",
+):
     """
     Apply a digital filter to the data.
 
@@ -57,7 +68,9 @@ def filter_signal(data: pd.Series | pd.DataFrame | np.ndarray, cutoff: float | L
     return filtered_signal
 
 
-def power_freq_spectrum(data: pd.Series | pd.DataFrame | np.ndarray, plotme: bool = False, fs: int = 120):
+def power_freq_spectrum(
+    data: pd.Series | pd.DataFrame | np.ndarray, plotme: bool = False, fs: int = 120
+):
     """
     Compute the power frequency spectrum of the data.
 
