@@ -14,73 +14,111 @@ def read_from_csv(path):
     return df.drop(index=0).reset_index(drop=True)
 
 
-def load_dot_files(filenames: List[str] | str = "", datapath: str = "", ui: bool = True) -> Dict[int, Dot]:
+def load_dot_files(
+    files: List[str] | str = "", datapath: str = "", session_trial_numbers: List[int] = [0]
+) -> Dict[int, List]:
     """
-    Load data from .csv files into a dictionary.
-
-    This function reads data from a list of .csv files, each file corresponding to single dot sensor file.
-    The data from each file is stored in a dictionary where the keys are the dot sensor IDs and the values are Dot objects.
+    Load dot files and return a dictionary of dot data.
 
     Args:
-        ui (bool): If True, a UI will be displayed to select the files to load. Defaults to True.
-        filenames (List[str]): A list of filenames to read data from.
-        datapath (str): The path to the directory where the .csv files are stored.
+        files (List[str] | str): List of file names or a single file name to load.
+        datapath (str): Path to the directory containing the dot files.
+        session_trial_numbers (List[int]): List of session trial numbers to load.
 
     Returns:
-        dotdata (Dict[str, Dot]): A dictionary where the keys are sensor IDs and the values are Dot objects containing.
-
-    IMPORTANT ASSUMPTIONS:
-    - the file names are prefixed with an integer corresponding to the real-life label of the sensor.
-
-    - The sensor names are suffixed with something that is unique to each instance of a collection. You can rename these if you wish, so long as all the sensors you collected with have the same suffix for each collection.
-    [sensor #]_[whatever you want]_[file id].csv
-
-        Dot sensors default to:
-        [sensor code]_[sensor id]_[date of collection].csv
-        sensor code = the label you have given it in the Movella app
-        sensor id = the unique id of the sensor
-        date of collection = the date the data was collected
+        Dict[int, List]: A dictionary where the keys are sensor IDs and the values are lists of dataframes for each trial.
     """
-    if ui:
-        direc, files = get_path("*.csv")
-    else:
-        direc = datapath
-        files = filenames
 
-    data_dict = {}
     dotdata = {}
-    filecounter = 0
-    previous_id = int(files[0].split("_")[0])
-    final_id = int(files[-1].split("_")[0])
-    dotid = [previous_id]
 
-    for i, file in enumerate(files):
-        temp = read_from_csv(os.path.join(direc, file))
-        id = int(file.split("_")[0])  # get the sensor ID
+    # get all sensor numbers from first element in file name string
+    sensorids = sorted(list(set([f.split("_")[0] for f in files])))
 
-        if id != previous_id:
-            dotdata[int(dotid[-1])] = Dot(data_dict)
-            data_dict = {}
-            dotid.append(id)
-            filecounter = 0
+    for id in sensorids:
+        # find all possible file names
+        available_files = sorted([file for file in files if file.split("_")[0] == str(id)])
 
-        data_dict[filecounter] = temp
-        filecounter += 1
-        previous_id = id
-        i += 1
-        if i == len(files) and id == final_id:
-            dotdata[int(dotid[-1])] = Dot(data_dict)
+        # filter for the files that correspond to the session trial numbers
+        indexed_files = [available_files[i] for i in [t - 1 for t in session_trial_numbers]]
+
+        # build list of dataframes for each trial
+        temp = []
+        for trial_file_name in indexed_files:
+            data = read_from_csv(os.path.join(datapath, trial_file_name))
+            temp.append(data)
+
+        dotdata[int(id)] = temp
+
     return dotdata
 
 
+# def load_dot_files(filenames: List[str] | str = "", datapath: str = "", ui: bool = True) -> Dict[int, Dot]:
+#     """
+#     Load data from .csv files into a dictionary.
+
+#     This function reads data from a list of .csv files, each file corresponding to single dot sensor file.
+#     The data from each file is stored in a dictionary where the keys are the dot sensor IDs and the values are Dot objects.
+
+#     Args:
+#         ui (bool): If True, a UI will be displayed to select the files to load. Defaults to True.
+#         filenames (List[str]): A list of filenames to read data from.
+#         datapath (str): The path to the directory where the .csv files are stored.
+
+#     Returns:
+#         dotdata (Dict[str, Dot]): A dictionary where the keys are sensor IDs and the values are Dot objects containing.
+
+#     IMPORTANT ASSUMPTIONS:
+#     - the file names are prefixed with an integer corresponding to the real-life label of the sensor (what you call it in the Movella App).
+
+#     - The sensor names are suffixed with something that is unique to each instance of a collection. You can rename these if you wish, so long as all the sensors you collected with have the same suffix for each collection.
+#     [sensor #]_[whatever you want]_[file id].csv
+
+#         Dot sensors default to:
+#         [sensor code]_[sensor id]_[date of collection].csv
+#         sensor code = the label you have given it in the Movella app
+#         sensor id = the unique id of the sensor
+#         date of collection = the date the data was collected
+#     """
+#     if ui:
+#         direc, files = get_path("*.csv")
+#     else:
+#         direc = datapath
+#         files = filenames
+
+#     data_dict = {}
+#     dotdata = {}
+#     filecounter = 0
+#     previous_id = int(files[0].split("_")[0])
+#     final_id = int(files[-1].split("_")[0])
+#     dotid = [previous_id]
+
+#     for i, file in enumerate(files):
+#         temp = read_from_csv(os.path.join(direc, file))
+#         id = int(file.split("_")[0])  # get the sensor ID
+
+#         if id != previous_id:
+#             dotdata[int(dotid[-1])] = Dot(data_dict)
+#             data_dict = {}
+#             dotid.append(id)
+#             filecounter = 0
+
+#         data_dict[filecounter] = temp
+#         filecounter += 1
+#         previous_id = id
+#         i += 1
+#         if i == len(files) and id == final_id:
+#             dotdata[int(dotid[-1])] = Dot(data_dict)
+#     return dotdata
+
+
 def save_dot_calibrations(calibration_data: dict, path: str = "dot_calibrations.pkl") -> None:
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         pickle.dump(calibration_data, f)
     print(f"Calibrations saved to {path}")
 
 
 def load_dot_calibrations(path: str = "dot_calibrations.pkl") -> Dict[str, pd.DataFrame]:
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         return pickle.load(f)
 
 
@@ -91,6 +129,7 @@ def __dot_data_indices():
         XsIntArray: A list of data channels to export from the DOT sensor. Type is native to the C++ API used behind the scenes.
     """
     import movelladot_pc_sdk as sdk  # type: ignore
+
     exportData = sdk.XsIntArray()  # type: ignore
     exportData.push_back(sdk.RecordingData_Timestamp)  # type: ignore
     exportData.push_back(sdk.RecordingData_Euler)  # type: ignore
@@ -152,7 +191,7 @@ def export_dot_data(dots2export: List[int] | str = "all", path: str = "data/") -
         device_id = device.deviceId().toXsString()
         for fileIndex in range(1, 9):
             device.selectExportData(exportData)
-            csvFilename = (os.path.join(path, f"dot_{device_id}_{fileIndex}.csv"))
+            csvFilename = os.path.join(path, f"dot_{device_id}_{fileIndex}.csv")
 
             device.enableLogging(csvFilename)
             device.startExportRecording(fileIndex)
@@ -169,7 +208,6 @@ def export_dot_data(dots2export: List[int] | str = "all", path: str = "data/") -
 
 
 def set_dot_location_names(locations, dotdata):
-
     model_data = {}
     for i, j in enumerate(locations.values()):
         loc = list(locations.keys())[list(locations.values()).index(j)]
@@ -177,7 +215,7 @@ def set_dot_location_names(locations, dotdata):
     return model_data
 
 
-def get_trial_numbers(filepath: str, participant_code: str | List[str], sheetnamne: str = "sensortrials"):
+def get_trial_numbers(filepath: str, participant_code: List[str], sheetnamne: str = "sensortrials"):
     """Loads the numbers corresponding to the trials collected with the sensors.
 
     Args:
@@ -196,8 +234,10 @@ def get_trial_numbers(filepath: str, participant_code: str | List[str], sheetnam
 
     return trial_numbers
 
+
 if __name__ == "__main__":
     import config
+
     dotdata_raw = load_dot_files()
     dot_locs = config.sensor_locations
     model_data = set_dot_location_names(dot_locs, dotdata_raw)
