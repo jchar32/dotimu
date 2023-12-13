@@ -1,10 +1,13 @@
-import pandas as pd
 import os
-import time
-from dot import Dot
-from typing import List, Dict
 import pickle
+import time
+from typing import Dict, List
+
+import pandas as pd
+
+from dot import Dot
 from ui import get_path
+
 
 def read_from_csv(path):
     df = pd.read_csv(path, header=0)
@@ -87,7 +90,7 @@ def __dot_data_indices():
     Returns:
         XsIntArray: A list of data channels to export from the DOT sensor. Type is native to the C++ API used behind the scenes.
     """
-    import movelladot_pc_sdk as sdk
+    import movelladot_pc_sdk as sdk  # type: ignore
     exportData = sdk.XsIntArray()  # type: ignore
     exportData.push_back(sdk.RecordingData_Timestamp)  # type: ignore
     exportData.push_back(sdk.RecordingData_Euler)  # type: ignore
@@ -173,6 +176,25 @@ def set_dot_location_names(locations, dotdata):
         model_data[loc] = dotdata[j]
     return model_data
 
+
+def get_trial_numbers(filepath: str, participant_code: str | List[str], sheetnamne: str = "sensortrials"):
+    """Loads the numbers corresponding to the trials collected with the sensors.
+
+    Args:
+        filepath (str): full path to file containing trial numbers
+        sheetname (str): name of sheet containing trial numbers
+        participant_code (str | List[str]): participant id codes as they appear in the trial number file
+
+    Returns:
+        pd.DataFrame: table of trial numbers for each specified participant. rows are: 'pid', 'a_npose', 'a_flean', 'a_rcycle', 'a_lcycle', 'a_walkcal',
+       'a_base', 'a_1', 'a_2', 'a_3', 'a_4', 'b_npose', 'b_flean', 'b_rcycle',
+       'b_lcycle', 'b_walkcal', 'b_base', 'b_1', 'b_2', 'b_3', 'b_4'.
+    """
+    trial_numbers = pd.read_excel(filepath, sheet_name=sheetnamne, header=0, index_col=0)
+
+    trial_numbers = trial_numbers.iloc[:, trial_numbers.columns.isin(participant_code)]
+
+    return trial_numbers
 
 if __name__ == "__main__":
     import config
