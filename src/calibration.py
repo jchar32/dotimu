@@ -28,9 +28,7 @@ def mean_dot_signals(dotdata: dict) -> dict:
     meandotdata = {}
     for d in dotdata.keys():
         for filenum in dotdata[d].data.keys():
-            temp[filenum] = (
-                dotdata[d].data[filenum].mean(axis=0, numeric_only=True)
-            )
+            temp[filenum] = dotdata[d].data[filenum].mean(axis=0, numeric_only=True)
         meandotdata[d] = temp
     return meandotdata
 
@@ -41,19 +39,21 @@ def ideal_ori() -> np.ndarray:
     Returns:
         np.ndarray: 3x3 matrix of the ideal orientation of the accelerometer.
     """
-    return np.array(
-        [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
-    )
+    return np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]])
 
 
-def gather_calibration_data(data: dict,
-                            collected_order: dict = {"bias": 0,
-                                                     "xup": 1,
-                                                     "xdown": 2,
-                                                     "yup": 3,
-                                                     "ydown": 4,
-                                                     "zup": 5,
-                                                     "zdown": 6}) -> pd.DataFrame:
+def gather_calibration_data(
+    data: dict,
+    collected_order: dict = {
+        "bias": 0,
+        "xup": 1,
+        "xdown": 2,
+        "yup": 3,
+        "ydown": 4,
+        "zup": 5,
+        "zdown": 6,
+    },
+) -> pd.DataFrame:
     """compile individual dataframes that were collected for each calibration step.
 
     ASSUMPTION - Data were collected in the following order:
@@ -134,26 +134,24 @@ def ori_and_bias(data: dict) -> dict:
 
     return calib_data
 
+
 def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     calibrated_data = copy.deepcopy(dotdata)
-
     for d in dotdata.keys():
-        for filenum in dotdata[d].data.keys():
+        for i, data in enumerate(dotdata[d]):
             # apply calibration
-            accel2cal = dotdata[d].data[filenum].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
-            corrected_accel = (
-                (cal[d].matrix @ accel2cal.T).T + cal[d].accel_bias
-            )
-            calibrated_data[d].data[filenum].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = corrected_accel
+            accel2cal = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
+            corrected_accel = (cal[d].matrix @ accel2cal.T).T + cal[d].accel_bias
+            calibrated_data[d][i].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = corrected_accel
 
-            gyro2cal = dotdata[d].data[filenum].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
-            corrected_gyro = (gyro2cal + cal[d].gyro_bias)
-            calibrated_data[d].data[filenum].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = corrected_gyro.values
+            gyro2cal = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
+            corrected_gyro = gyro2cal + cal[d].gyro_bias
+            calibrated_data[d][i].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = corrected_gyro.values
 
     return calibrated_data
 
 
-def apply_s2b(model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False):
+def apply_sensor2body(model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False):
     """applies a sensor to body calibration matrix to the dot sensor data. Assumes the sensor data is in the sensor frame and the calibration matrix is from the sensor frame to the body frame. The result is the sensor data in the body frame.
 
     Args:
@@ -175,32 +173,43 @@ def apply_s2b(model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False
 
     num_sensors = len(model_data.keys())
     if num_sensors != len(s2b.keys()):
-        raise ValueError(f"Mismatch between number of sensors: {num_sensors} and number of sensor to body calibration matrices: {len(s2b.keys())}.")
+        raise ValueError(
+            f"Mismatch between number of sensors: {num_sensors} and number of sensor to body calibration matrices: {len(s2b.keys())}."
+        )
 
-    for s in model_data.keys():
-        for t in model_data[s].data.keys():
+    for s in calibrated_data.keys():
+        print(f"Applying calibration to {s}")
+        # check if signals are present
+        accel = True and "Acc_X" in calibrated_data[s][0].columns
+        gyro = True and "Gyr_X" in calibrated_data[s][0].columns
+        mag = True and "Mag_X" in calibrated_data[s][0].columns
+        quatern = True and "Quat_X" in calibrated_data[s][0].columns
+        eul = True and "Eul_X" in calibrated_data[s][0].columns
+
+        for data in calibrated_data[s]:
             if accel:
-                acc_data = calibrated_data[s].data[t].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy() @ s2b[s].T
-                calibrated_data[s].data[t].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = acc_data
+                acc_data = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy() @ s2b[s].T
+                data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = acc_data
             if gyro:
-                gyro_data = calibrated_data[s].data[t].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy() @ s2b[s].T
-                calibrated_data[s].data[t].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = gyro_data
+                gyro_data = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy() @ s2b[s].T
+                data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = gyro_data
             if mag:
-                mag_data = calibrated_data[s].data[t].loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy() @ s2b[s].T
-                calibrated_data[s].data[t].loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag_data
+                mag_data = data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy() @ s2b[s].T
+                data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag_data
 
-            if quaternion and 'Quat_W' in calibrated_data[s].data[t].columns:
+            if quatern:
                 Rq = quat.from_rotmat(s2b[s])
-                ori = calibrated_data[s].data[t].loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]].to_numpy()
+                ori = data.loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]].to_numpy()
 
                 # looped since product function is not vectorized
                 for i in range(ori.shape[0]):
                     ori[i, :] = quat.product(Rq, ori[i, :])
 
-                calibrated_data[s].data[t].loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]] = ori
+                data.loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]] = ori
     return calibrated_data
 
-def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
+
+def get_sensor2body(trialsmap: dict, data: dict) -> dict:
     """Obtain functional calibration matrix for each sensor. The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to). Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
 
     Args:
@@ -226,43 +235,46 @@ def calculate_sensor2body(trialsmap: dict, data: dict) -> dict:
     nan_mat = np.full((3, 3), dtype=float, fill_value=np.nan)
     for s in sensors:
         s2b[s] = nan_mat.copy()
-        s2b[s][-1, :] = __set_vertical_axis(data[s].data[trialsmap["npose"]])
+        s2b[s][-1, :] = __set_vertical_axis(data[s][trialsmap["npose"]])
 
     # pelvis
-    s2b["pelvis"][:, :] = set_pelvis_axes(data["pelvis"].data[trialsmap["lean"]], s2b["pelvis"][-1, :])
+    s2b["pelvis"][:, :] = set_pelvis_axes(data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :])
 
     # Functional Calibration for lower limbs
     for s in sensors:
         if s == "pelvis":
             continue
-        if 'r' in s:
+        if "r" in s:
             # temp = data[s].data[trialsmap["rcycle"]]
-            s2b[s][:, :] = set_func_ml_axis(data[s].data[trialsmap["rcycle"]], s2b[s][-1, :], 'r')
+            s2b[s][:, :] = set_func_ml_axis(data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r")
         else:
             # temp = data[s].data[trialsmap["lcycle"]]
-            s2b[s][:, :] = set_func_ml_axis(data[s].data[trialsmap["lcycle"]], s2b[s][-1, :], 'l')
+            s2b[s][:, :] = set_func_ml_axis(data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l")
 
     return s2b
 
-def __set_vertical_axis(data):
 
+def __set_vertical_axis(data):
     gvec = data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
     gvec /= np.linalg.norm(gvec)
 
     return -1 * gvec
 
-def set_pelvis_axes(data, pelvis_vert_axis):
+
+def set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
     # temp = data["pelvis"].data[trialsmap["lean"]]
-    gvec_ap = data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    ap_temp = gvec_ap / np.linalg.norm(gvec_ap)
+    ap_temp = forward_lean_data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    ap_temp /= np.linalg.norm(ap_temp)
     ml = np.cross(ap_temp, pelvis_vert_axis)
     ml /= np.linalg.norm(ml)
     ap = np.cross(ml, pelvis_vert_axis)
     ap /= np.linalg.norm(ap)
-    return np.vstack([ap, ml, pelvis_vert_axis])
+    infsup = np.cross(ap, ml)
+    infsup /= np.linalg.norm(infsup)
+    return np.vstack([ap, ml, infsup])
+
 
 def set_func_ml_axis(data, vertical_axis, side):
-
     # eigvector decomp to get gyr signal variance. Largest variance is ML axis
     gyr = data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
     _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
@@ -271,11 +283,13 @@ def set_func_ml_axis(data, vertical_axis, side):
 
     ap_axis = np.cross(ml_axis, vertical_axis)
     ap_axis /= np.linalg.norm(ap_axis)
+    infsup = np.cross(ap_axis, ml_axis)
+    infsup /= np.linalg.norm(infsup)
+    return np.vstack([ap_axis, ml_axis, infsup])
 
-    return np.vstack([ap_axis, ml_axis, vertical_axis])
 
 def flip_left_ml_axis(evecs, side):
     # flip ML axis for left side so all axis conventions match Right to Left
-    if side == 'l' and (evecs[-1] > 0):
+    if side == "l" and (evecs[-1] > 0):
         evecs *= -1
     return evecs
