@@ -52,65 +52,6 @@ def load_dot_files(
     return dotdata
 
 
-# def load_dot_files(filenames: List[str] | str = "", datapath: str = "", ui: bool = True) -> Dict[int, Dot]:
-#     """
-#     Load data from .csv files into a dictionary.
-
-#     This function reads data from a list of .csv files, each file corresponding to single dot sensor file.
-#     The data from each file is stored in a dictionary where the keys are the dot sensor IDs and the values are Dot objects.
-
-#     Args:
-#         ui (bool): If True, a UI will be displayed to select the files to load. Defaults to True.
-#         filenames (List[str]): A list of filenames to read data from.
-#         datapath (str): The path to the directory where the .csv files are stored.
-
-#     Returns:
-#         dotdata (Dict[str, Dot]): A dictionary where the keys are sensor IDs and the values are Dot objects containing.
-
-#     IMPORTANT ASSUMPTIONS:
-#     - the file names are prefixed with an integer corresponding to the real-life label of the sensor (what you call it in the Movella App).
-
-#     - The sensor names are suffixed with something that is unique to each instance of a collection. You can rename these if you wish, so long as all the sensors you collected with have the same suffix for each collection.
-#     [sensor #]_[whatever you want]_[file id].csv
-
-#         Dot sensors default to:
-#         [sensor code]_[sensor id]_[date of collection].csv
-#         sensor code = the label you have given it in the Movella app
-#         sensor id = the unique id of the sensor
-#         date of collection = the date the data was collected
-#     """
-#     if ui:
-#         direc, files = get_path("*.csv")
-#     else:
-#         direc = datapath
-#         files = filenames
-
-#     data_dict = {}
-#     dotdata = {}
-#     filecounter = 0
-#     previous_id = int(files[0].split("_")[0])
-#     final_id = int(files[-1].split("_")[0])
-#     dotid = [previous_id]
-
-#     for i, file in enumerate(files):
-#         temp = read_from_csv(os.path.join(direc, file))
-#         id = int(file.split("_")[0])  # get the sensor ID
-
-#         if id != previous_id:
-#             dotdata[int(dotid[-1])] = Dot(data_dict)
-#             data_dict = {}
-#             dotid.append(id)
-#             filecounter = 0
-
-#         data_dict[filecounter] = temp
-#         filecounter += 1
-#         previous_id = id
-#         i += 1
-#         if i == len(files) and id == final_id:
-#             dotdata[int(dotid[-1])] = Dot(data_dict)
-#     return dotdata
-
-
 def save_dot_calibrations(calibration_data: dict, path: str = "dot_calibrations.pkl") -> None:
     with open(path, "wb") as f:
         pickle.dump(calibration_data, f)
