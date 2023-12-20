@@ -54,7 +54,9 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
 
         # 1. HS detection
         try:
-            k3_tmp = signal.find_peaks(-accel_norm[current_negpeak_hs - 15 : current_negpeak_hs + 5], prominence=1)
+            k3_tmp = signal.find_peaks(
+                -accel_norm[current_negpeak_hs - 15 : current_negpeak_hs + 5], prominence=1
+            )
             k3 = int((k3_tmp[0][np.argmax(k3_tmp[1]["prominences"])] + current_negpeak_hs - 15))
             hs = np.append(hs, k3)
 
@@ -64,7 +66,10 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
 
         # 2. TO detection
         try:
-            k22_tmp = signal.find_peaks(accel_norm[current_negpeak_to - 15 : np.min([endsample, current_negpeak_to + 15])], prominence=1)
+            k22_tmp = signal.find_peaks(
+                accel_norm[current_negpeak_to - 15 : np.min([endsample, current_negpeak_to + 15])],
+                prominence=1,
+            )
             k22 = int((k22_tmp[0][np.argmax(k22_tmp[1]["prominences"])] + current_negpeak_to - 15))
             to = np.append(to, k22)
 
@@ -81,8 +86,13 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
             accel_thresh *= 9.81
 
         try:
-            zupt_tmp = (gyro_norm[hs[-1]:to[-1]] < gyro_thresh) & (accel_norm[hs[-1]:to[-1]] < accel_thresh)
-            mid_zupt = int((np.where(zupt_tmp)[0][-1] - np.where(zupt_tmp)[0][0]) / 2 + (np.where(zupt_tmp)[0][0] + hs[-1]))
+            zupt_tmp = (gyro_norm[hs[-1] : to[-1]] < gyro_thresh) & (
+                accel_norm[hs[-1] : to[-1]] < accel_thresh
+            )
+            mid_zupt = int(
+                (np.where(zupt_tmp)[0][-1] - np.where(zupt_tmp)[0][0]) / 2
+                + (np.where(zupt_tmp)[0][0] + hs[-1])
+            )
             midstance = np.append(midstance, mid_zupt)
         except ValueError:
             mid_zupt = int((to[-1] - hs[-1]) / 2 + hs[-1])
@@ -101,9 +111,7 @@ def zeni():
     pass
 
 
-def midswing_peak(
-    gyroml: np.ndarray, negpeak_idx: np.ndarray, min_peak_dist: int = 50
-):
+def midswing_peak(gyroml: np.ndarray, negpeak_idx: np.ndarray, min_peak_dist: int = 50):
     """Detects midswing peaks in the gyro mediolateral axis signal.
 
     Args:
@@ -115,8 +123,7 @@ def midswing_peak(
         Tuple[np.ndarray, Dict[str, np.ndarray]]: A tuple containing the indices of midswing peaks and the properties of the peaks.
     """
     idx_tmp, props_tmp = signal.find_peaks(
-        gyroml, prominence=1, distance=min_peak_dist,
-        height=-0.5 * gyroml[negpeak_idx].mean()
+        gyroml, prominence=1, distance=min_peak_dist, height=-0.5 * gyroml[negpeak_idx].mean()
     )
     return idx_tmp, props_tmp
 
@@ -150,9 +157,7 @@ def index_gyro_negpeaks(data: pd.DataFrame | pd.Series | np.ndarray, mlaxis: int
     negpeak_thresh_tmp = (gyroml[gyroml < 0]).mean() * 1.75
 
     # check peaks using initial threshold
-    idx_tmp, props_tmp = signal.find_peaks(
-        -gyroml, prominence=2, height=negpeak_thresh_tmp
-    )
+    idx_tmp, props_tmp = signal.find_peaks(-gyroml, prominence=2, height=negpeak_thresh_tmp)
 
     # use mean of peak heights as new threshold
     negpeak_thresh = props_tmp["peak_heights"].mean()
@@ -171,9 +176,7 @@ def index_gyro_negpeaks(data: pd.DataFrame | pd.Series | np.ndarray, mlaxis: int
     return idx, negpeak_thresh, frames_between_peaks
 
 
-def get(
-    data: pd.DataFrame, method: str = "mariani", fs: int = 120, gyro_ml_axis: int = 1
-):
+def gait_events(data: pd.DataFrame, method: str = "mariani", fs: int = 120, gyro_ml_axis: int = 1):
     """main function for calculating gait events using several common algorithms.
 
     Args:
