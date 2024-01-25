@@ -21,15 +21,26 @@ def mean_dot_signals(dotdata: dict) -> dict:
         dotdata (dict | pd.DataFrame): dict of dot objects or datarfame of dot data of samples x signals
 
     Returns:
-        dict | pd.DataFrame: dict of dot objects or datarfame of dot data with the mean of each signal.
+        dict | pd.DataFrame: dict of dot objects or dataframe of dot data with the mean of each signal.
     """
 
     temp = {}
     meandotdata = {}
     for d in dotdata.keys():
-        for filenum in dotdata[d].data.keys():
-            temp[filenum] = dotdata[d].data[filenum].mean(axis=0, numeric_only=True)
-        meandotdata[d] = temp
+        try:
+            dotdata[d].keys()
+        except AttributeError:
+            for d in dotdata.keys():                
+                for filenum in range(len(dotdata[d])):
+                    temp[filenum] = dotdata[d][filenum].mean(axis=0, numeric_only=True)
+                meandotdata[d] = temp
+                temp = {}
+        else:
+            for filenum in dotdata[d].keys():
+                temp[filenum] = dotdata[d][filenum].mean(axis=0, numeric_only=True)
+            meandotdata[d] = temp
+            temp = {}
+
     return meandotdata
 
 
@@ -129,8 +140,8 @@ def ori_and_bias(data: dict) -> dict:
         accel_bias = X[3, :]
 
         gyro_bias = cali_data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
-
-        calib_data[id] = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
+        cal_results = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
+        calib_data[id] = cal_results
 
     return calib_data
 
