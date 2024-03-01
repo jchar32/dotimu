@@ -15,7 +15,9 @@ def read_from_csv(path):
 
 
 def load_dot_files(
-    files: List[str] | str = "", datapath: str = "", session_trial_numbers: List[int] = [0]
+    files: List[str] | str = "",
+    datapath: str = "",
+    session_trial_numbers: List[int] = [0],
 ) -> Dict[int, List]:
     """
     Load dot files and return a dictionary of dot data.
@@ -36,10 +38,14 @@ def load_dot_files(
 
     for id in sensorids:
         # find all possible file names
-        available_files = sorted([file for file in files if file.split("_")[0] == str(id)])
+        available_files = sorted(
+            [file for file in files if file.split("_")[0] == str(id)]
+        )
 
         # filter for the files that correspond to the session trial numbers
-        indexed_files = [available_files[i] for i in [t - 1 for t in session_trial_numbers]]
+        indexed_files = [
+            available_files[i] for i in [t - 1 for t in session_trial_numbers]
+        ]
 
         # build list of dataframes for each trial
         temp = []
@@ -52,13 +58,17 @@ def load_dot_files(
     return dotdata
 
 
-def save_dot_calibrations(calibration_data: dict, path: str = "dot_calibrations.pkl") -> None:
+def save_dot_calibrations(
+    calibration_data: dict, path: str = "dot_calibrations.pkl"
+) -> None:
     with open(path, "wb") as f:
         pickle.dump(calibration_data, f)
     print(f"Calibrations saved to {path}")
 
 
-def load_dot_calibrations(path: str = "dot_calibrations.pkl") -> Dict[str, pd.DataFrame]:
+def load_dot_calibrations(
+    path: str = "dot_calibrations.pkl",
+) -> Dict[str, pd.DataFrame]:
     with open(path, "rb") as f:
         return pickle.load(f)
 
@@ -156,7 +166,9 @@ def set_dot_location_names(locations, dotdata):
     return model_data
 
 
-def get_trial_numbers(filepath: str, participant_code: List[str], sheetnamne: str = "sensortrials"):
+def get_trial_numbers(
+    filepath: str, participant_code: List[int], sheetname: str = "sensortrials"
+):
     """Loads the numbers corresponding to the trials collected with the sensors.
 
     Args:
@@ -166,14 +178,12 @@ def get_trial_numbers(filepath: str, participant_code: List[str], sheetnamne: st
 
     Returns:
         pd.DataFrame: table of trial numbers for each specified participant. rows are: 'pid', 'a_npose', 'a_flean', 'a_rcycle', 'a_lcycle', 'a_walkcal',
-       'a_base', 'a_1', 'a_2', 'a_3', 'a_4', 'b_npose', 'b_flean', 'b_rcycle',
-       'b_lcycle', 'b_walkcal', 'b_base', 'b_1', 'b_2', 'b_3', 'b_4'.
+       'a_base', 'a_1', 'a_2', 'a_3', 'a_4'. Columns are the participant codes.
     """
-    trial_numbers = pd.read_excel(filepath, sheet_name=sheetnamne, header=0, index_col=0)
+    trial_numbers = pd.read_excel(filepath, sheet_name=sheetname, header=0, index_col=0)
+    participant_trial_numbers = trial_numbers.iloc[:, participant_code]
 
-    trial_numbers = trial_numbers.iloc[:, trial_numbers.columns.isin(participant_code)]
-
-    return trial_numbers
+    return participant_trial_numbers
 
 
 if __name__ == "__main__":
