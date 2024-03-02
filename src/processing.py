@@ -54,7 +54,9 @@ def filter_signal(
     b, a = _get_filter_coefs(type=type, cutoff=cutoff, fs=fs, order=order)
 
     # assumes time axis is 0
-    filtered_signal = signal.filtfilt(b, a, data, axis=0)  # returns as np.ndarray by default
+    filtered_signal = signal.filtfilt(
+        b, a, data, axis=0
+    )  # returns as np.ndarray by default
 
     # TODO: consider implementing a return_as option to return the data in a different format (pd.dataframe, pd.series, or np.ndarray)
     # if return_as == "same":
