@@ -30,6 +30,7 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
     Returns:
         GaitEvents: events is returned populated with indices of gait events.
     """
+    # TODO: bring in only the accel and gyro data already filtered, instead of sending full dataframe in.
     # generate the signals needed for this algo
     filtered_accel = filter_signal(
         data.loc[:, "Acc_X":"Acc_Z"], cutoff=17, fs=120, type="lowpass", order=2
@@ -55,22 +56,41 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
         # 1. HS detection
         try:
             k3_tmp = signal.find_peaks(
-                -accel_norm[current_negpeak_hs - 15 : current_negpeak_hs + 5], prominence=1
+                -accel_norm[current_negpeak_hs - 15 : current_negpeak_hs + 5],
+                prominence=1,
             )
-            k3 = int((k3_tmp[0][np.argmax(k3_tmp[1]["prominences"])] + current_negpeak_hs - 15))
+            k3 = int(
+                (
+                    k3_tmp[0][np.argmax(k3_tmp[1]["prominences"])]
+                    + current_negpeak_hs
+                    - 15
+                )
+            )
             hs = np.append(hs, k3)
 
         except ValueError:
-            k6 = int(np.argmax(np.diff(gyro_norm[startsample : current_negpeak_hs + 10])))
+            k6 = int(
+                np.argmax(np.diff(gyro_norm[startsample : current_negpeak_hs + 10]))
+            )
             hs = np.append(hs, k6 + startsample)
 
         # 2. TO detection
         try:
             k22_tmp = signal.find_peaks(
-                accel_norm[current_negpeak_to - 15 : np.min([endsample, current_negpeak_to + 15])],
+                accel_norm[
+                    current_negpeak_to - 15 : np.min(
+                        [endsample, current_negpeak_to + 15]
+                    )
+                ],
                 prominence=1,
             )
-            k22 = int((k22_tmp[0][np.argmax(k22_tmp[1]["prominences"])] + current_negpeak_to - 15))
+            k22 = int(
+                (
+                    k22_tmp[0][np.argmax(k22_tmp[1]["prominences"])]
+                    + current_negpeak_to
+                    - 15
+                )
+            )
             to = np.append(to, k22)
 
         except ValueError:
@@ -98,7 +118,7 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
             mid_zupt = int((to[-1] - hs[-1]) / 2 + hs[-1])
             midstance = np.append(midstance, mid_zupt)
 
-    events = GaitEvents(hs=hs, to=hs, midstance=midstance, midswing=midswing)
+    events = GaitEvents(hs=hs, to=to, midstance=midstance, midswing=midswing)
 
     return events
 
@@ -123,7 +143,10 @@ def midswing_peak(gyroml: np.ndarray, negpeak_idx: np.ndarray, min_peak_dist: in
         Tuple[np.ndarray, Dict[str, np.ndarray]]: A tuple containing the indices of midswing peaks and the properties of the peaks.
     """
     idx_tmp, props_tmp = signal.find_peaks(
-        gyroml, prominence=1, distance=min_peak_dist, height=-0.5 * gyroml[negpeak_idx].mean()
+        gyroml,
+        prominence=1,
+        distance=min_peak_dist,
+        height=-0.5 * gyroml[negpeak_idx].mean(),
     )
     return idx_tmp, props_tmp
 
@@ -157,7 +180,9 @@ def index_gyro_negpeaks(data: pd.DataFrame | pd.Series | np.ndarray, mlaxis: int
     negpeak_thresh_tmp = (gyroml[gyroml < 0]).mean() * 1.75
 
     # check peaks using initial threshold
-    idx_tmp, props_tmp = signal.find_peaks(-gyroml, prominence=2, height=negpeak_thresh_tmp)
+    idx_tmp, props_tmp = signal.find_peaks(
+        -gyroml, prominence=2, height=negpeak_thresh_tmp
+    )
 
     # use mean of peak heights as new threshold
     negpeak_thresh = props_tmp["peak_heights"].mean()
@@ -176,7 +201,9 @@ def index_gyro_negpeaks(data: pd.DataFrame | pd.Series | np.ndarray, mlaxis: int
     return idx, negpeak_thresh, frames_between_peaks
 
 
-def gait_events(data: pd.DataFrame, method: str = "mariani", fs: int = 120, gyro_ml_axis: int = 1):
+def gait_events(
+    data: pd.DataFrame, method: str = "mariani", fs: int = 120, gyro_ml_axis: int = 1
+):
     """main function for calculating gait events using several common algorithms.
 
     Args:
