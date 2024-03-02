@@ -167,7 +167,7 @@ def set_dot_location_names(locations, dotdata):
 
 
 def get_trial_numbers(
-    filepath: str, participant_code: List[int], sheetname: str = "sensortrials"
+    filepath: str, participant_code: List[str], sheetname: str = "sensortrials"
 ):
     """Loads the numbers corresponding to the trials collected with the sensors.
 
@@ -177,11 +177,12 @@ def get_trial_numbers(
         participant_code (str | List[str]): participant id codes as they appear in the trial number file
 
     Returns:
-        pd.DataFrame: table of trial numbers for each specified participant. rows are: 'pid', 'a_npose', 'a_flean', 'a_rcycle', 'a_lcycle', 'a_walkcal',
-       'a_base', 'a_1', 'a_2', 'a_3', 'a_4'. Columns are the participant codes.
+        pd.DataFrame: table of trial numbers for each specified participant. rows are based on trial names in the csv or xlsx file. Columns are the participant codes.
     """
     trial_numbers = pd.read_excel(filepath, sheet_name=sheetname, header=0, index_col=0)
-    participant_trial_numbers = trial_numbers.iloc[:, participant_code]
+    participant_trial_numbers = trial_numbers.iloc[
+        :, trial_numbers.columns == int(participant_code[0])
+    ]
 
     return participant_trial_numbers
 
