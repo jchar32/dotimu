@@ -114,7 +114,7 @@ def mariani(data: pd.DataFrame, midswing: np.ndarray, negpeak_idx: np.ndarray):
                 + (np.where(zupt_tmp)[0][0] + hs[-1])
             )
             midstance = np.append(midstance, mid_zupt)
-        except ValueError:
+        except (ValueError, IndexError):
             mid_zupt = int((to[-1] - hs[-1]) / 2 + hs[-1])
             midstance = np.append(midstance, mid_zupt)
 
