@@ -24,7 +24,11 @@ def conjugate(q, scalarLast=False):
     Returns:
         ndarray: conjugate of q
     """
-    return np.array([q[0], -q[1], -q[2], -q[3]]) if not scalarLast else np.array([-q[0], -q[1], -q[2], q[3]])
+    return (
+        np.array([q[0], -q[1], -q[2], -q[3]])
+        if not scalarLast
+        else np.array([-q[0], -q[1], -q[2], q[3]])
+    )
 
 
 def inverse(q, scalarLast=False):
@@ -52,9 +56,13 @@ def exponential(q, scalarLast=False):
     qv = q[1:4] if not scalarLast else q[0:3]
     qv_norm = np.linalg.norm(qv)
     return (
-        np.array([np.exp(q0) * np.cos(qv_norm), np.exp(q0) * qv * np.sin(qv_norm) / qv_norm])
+        np.array(
+            [np.exp(q0) * np.cos(qv_norm), np.exp(q0) * qv * np.sin(qv_norm) / qv_norm]
+        )
         if not scalarLast
-        else np.array([np.exp(q0) * qv * np.sin(qv_norm) / qv_norm, np.exp(q0) * np.cos(qv_norm)])
+        else np.array(
+            [np.exp(q0) * qv * np.sin(qv_norm) / qv_norm, np.exp(q0) * np.cos(qv_norm)]
+        )
     )
 
 
@@ -71,9 +79,19 @@ def logarithm(q, scalarLast=False):
     qv = q[1:4] if not scalarLast else q[0:3]
     qv_norm = np.linalg.norm(qv)
     return (
-        np.array([np.log(np.linalg.norm(q)), qv * np.arccos(q0 / np.linalg.norm(q)) / qv_norm])
+        np.array(
+            [
+                np.log(np.linalg.norm(q)),
+                qv * np.arccos(q0 / np.linalg.norm(q)) / qv_norm,
+            ]
+        )
         if not scalarLast
-        else np.array([qv * np.arccos(q0 / np.linalg.norm(q)) / qv_norm, np.log(np.linalg.norm(q))])
+        else np.array(
+            [
+                qv * np.arccos(q0 / np.linalg.norm(q)) / qv_norm,
+                np.log(np.linalg.norm(q)),
+            ]
+        )
     )
 
 
@@ -133,9 +151,9 @@ def to_angles(q, scalarLast=False):
     else:
         q0, qx, qy, qz = q.squeeze().tolist()
 
-    phi = np.arctan2(2.0 * (q0 * qx + qy * qz), 1.0 - 2.0 * (qx ** 2 + qy ** 2))
+    phi = np.arctan2(2.0 * (q0 * qx + qy * qz), 1.0 - 2.0 * (qx**2 + qy**2))
     theta = np.arcsin(2.0 * (q0 * qy - qz * qx))
-    psi = np.arctan2(2.0 * (q0 * qz + qx * qy), 1.0 - 2.0 * (qy ** 2 + qz ** 2))
+    psi = np.arctan2(2.0 * (q0 * qz + qx * qy), 1.0 - 2.0 * (qy**2 + qz**2))
     return np.array([phi, theta, psi])
 
 
@@ -155,9 +173,21 @@ def to_DCM(q, scalarLast=False):
 
     DCM = np.array(
         [
-            [1.0 - 2.0 * (qy ** 2 + qz ** 2), 2.0 * (qx * qy - q0 * qz), 2.0 * (qx * qz + q0 * qy)],
-            [2.0 * (qx * qy + q0 * qz), 1.0 - 2.0 * (qx ** 2 + qz ** 2), 2.0 * (qy * qz - q0 * qx)],
-            [2.0 * (qx * qz - q0 * qy), 2.0 * (qy * qz + q0 * qx), 1.0 - 2.0 * (qx ** 2 + qy ** 2)],
+            [
+                1.0 - 2.0 * (qy**2 + qz**2),
+                2.0 * (qx * qy - q0 * qz),
+                2.0 * (qx * qz + q0 * qy),
+            ],
+            [
+                2.0 * (qx * qy + q0 * qz),
+                1.0 - 2.0 * (qx**2 + qz**2),
+                2.0 * (qy * qz - q0 * qx),
+            ],
+            [
+                2.0 * (qx * qz - q0 * qy),
+                2.0 * (qy * qz + q0 * qx),
+                1.0 - 2.0 * (qx**2 + qy**2),
+            ],
         ]
     )
     return DCM
@@ -181,8 +211,16 @@ def from_rpy(angles: np.ndarray):
     cr = np.cos(roll * 0.5)
     sr = np.sin(roll * 0.5)
 
-    q = np.array([cy * cp * cr + sy * sp * sr, cy * cp * sr - sy * sp * cr, sy * cp * sr + cy * sp * cr, sy * cp * cr - cy * sp * sr])
+    q = np.array(
+        [
+            cy * cp * cr + sy * sp * sr,
+            cy * cp * sr - sy * sp * cr,
+            sy * cp * sr + cy * sp * cr,
+            sy * cp * cr - cy * sp * sr,
+        ]
+    )
     return q
+
 
 def from_rotmat(R: np.ndarray):
     """converts a 3x3 orthonormal rotation matrix to a quaternion in scalar first form
@@ -200,7 +238,9 @@ def from_rotmat(R: np.ndarray):
     if R.ndim not in [2, 3]:
         raise ValueError("R must be a 2 or 3 dimensional matrix")
     if R.shape[-2:] != (3, 3):
-        raise ValueError(f"Function expects a 3x3 or Nx3x3 matrix. You passed a {R.shape} matrix.")
+        raise ValueError(
+            f"Function expects a 3x3 or Nx3x3 matrix. You passed a {R.shape} matrix."
+        )
     if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-6):
         warn("R is not orthogonal")
 
@@ -237,6 +277,7 @@ def from_rotmat(R: np.ndarray):
 
     q /= np.linalg.norm(q, axis=0, keepdims=True)
     return q
+
 
 def from_axis_angle(ax: np.ndarray, angleFirst=False):
     """convert a rotation in axis angle form to a quaternion in scalar first form
