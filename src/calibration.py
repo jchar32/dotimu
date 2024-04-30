@@ -30,7 +30,7 @@ def mean_dot_signals(dotdata: dict) -> dict:
         try:
             dotdata[d].keys()
         except AttributeError:
-            for d in dotdata.keys():                
+            for d in dotdata.keys():
                 for filenum in range(len(dotdata[d])):
                     temp[filenum] = dotdata[d][filenum].mean(axis=0, numeric_only=True)
                 meandotdata[d] = temp
@@ -50,7 +50,9 @@ def ideal_ori() -> np.ndarray:
     Returns:
         np.ndarray: 3x3 matrix of the ideal orientation of the accelerometer.
     """
-    return np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]])
+    return np.array(
+        [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
+    )
 
 
 def gather_calibration_data(
@@ -157,12 +159,16 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
 
             gyro2cal = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
             corrected_gyro = gyro2cal + cal[d].gyro_bias
-            calibrated_data[d][i].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = corrected_gyro.values
+            calibrated_data[d][i].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = (
+                corrected_gyro.values
+            )
 
     return calibrated_data
 
 
-def apply_sensor2body(model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False):
+def apply_sensor2body(
+    model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False
+):
     """applies a sensor to body calibration matrix to the dot sensor data. Assumes the sensor data is in the sensor frame and the calibration matrix is from the sensor frame to the body frame. The result is the sensor data in the body frame.
 
     Args:
@@ -199,13 +205,19 @@ def apply_sensor2body(model_data, s2b, accel=True, gyro=True, mag=True, quaterni
 
         for data in calibrated_data[s]:
             if accel:
-                acc_data = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy() @ s2b[s].T
+                acc_data = (
+                    data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy() @ s2b[s].T
+                )
                 data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = acc_data
             if gyro:
-                gyro_data = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy() @ s2b[s].T
+                gyro_data = (
+                    data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy() @ s2b[s].T
+                )
                 data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = gyro_data
             if mag:
-                mag_data = data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy() @ s2b[s].T
+                mag_data = (
+                    data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy() @ s2b[s].T
+                )
                 data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag_data
 
             if quatern:
@@ -248,8 +260,10 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
         s2b[s] = nan_mat.copy()
         s2b[s][-1, :] = __set_vertical_axis(data[s][trialsmap["npose"]])
 
-    # pelvis
-    s2b["pelvis"][:, :] = __set_pelvis_axes(data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :])
+    # pelvis temp ap axis. This is used to find the ML axis
+    s2b["pelvis"][:, :] = __set_pelvis_axes(
+        data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :]
+    )
 
     # Functional Calibration for lower limbs
     for s in sensors:
@@ -257,16 +271,20 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
             continue
         if "r" in s:
             # temp = data[s].data[trialsmap["rcycle"]]
-            s2b[s][:, :] = __set_func_ml_axis(data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r")
+            s2b[s][:, :] = __set_func_ml_axis(
+                data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
+            )
         else:
             # temp = data[s].data[trialsmap["lcycle"]]
-            s2b[s][:, :] = __set_func_ml_axis(data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l")
+            s2b[s][:, :] = __set_func_ml_axis(
+                data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
+            )
 
     return s2b
 
 
 def __set_vertical_axis(data):
-    gvec = data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    gvec = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
     gvec /= np.linalg.norm(gvec)
 
     return -1 * gvec
@@ -274,7 +292,7 @@ def __set_vertical_axis(data):
 
 def __set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
     # temp = data["pelvis"].data[trialsmap["lean"]]
-    ap_temp = forward_lean_data[["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    ap_temp = forward_lean_data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
     ap_temp /= np.linalg.norm(ap_temp)
     ml = np.cross(ap_temp, pelvis_vert_axis)
     ml /= np.linalg.norm(ml)
@@ -285,14 +303,40 @@ def __set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
     return np.vstack([ap, ml, infsup])
 
 
+def __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis):
+    # The estimated ml axis may not be pointing in the correct ml direction. To fix the axis direction so it points to the right of the body, we need to make a temporary vector from which we can use the gravity vector and the right hand rule to determine the correct direction.
+    # During the cycling motion, most of the acceleration will be vertical with some in the ap and ml. We will use this as a quick way to get an extra temporary vector.
+    temp_cycle_accel = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    temp_cycle_accel /= np.linalg.norm(temp_cycle_accel)
+    ml_direc_vec = np.cross(
+        vertical_axis,
+        temp_cycle_accel,
+    )
+
+    return ml_direc_vec
+
+
 def __set_func_ml_axis(data, vertical_axis, side):
     # eigvector decomp to get gyr signal variance. Largest variance is ML axis
-    gyr = data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
-    _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr)).T))
+    gyr = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+    _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr, axis=0)).T))
 
-    ml_axis = __flip_left_ml_axis(evecs[:, 0].T, side)
+    ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
 
-    ap_axis = np.cross(ml_axis, vertical_axis)
+    # flip the eigenvector if it is pointing in the wrong direction
+    if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
+        evecs *= -1
+
+    # so primary axis is always in positive wrt. to the sensor frame
+    # if evecs[np.argmax(np.abs(evecs[:, 0])), 0] <= 0:
+    #     evecs *= -1
+
+    ml_axis = -1 * evecs[:, 0]
+
+    ap_axis = np.cross(
+        ml_axis,
+        vertical_axis,
+    )
     ap_axis /= np.linalg.norm(ap_axis)
     infsup = np.cross(ap_axis, ml_axis)
     infsup /= np.linalg.norm(infsup)
@@ -300,6 +344,7 @@ def __set_func_ml_axis(data, vertical_axis, side):
 
 
 def __flip_left_ml_axis(evecs, side):
+    # TODO: remove later as this is unused.
     # flip ML axis for left side so all axis conventions match Right to Left
     if side == "l" and (evecs[-1] > 0):
         evecs *= -1
