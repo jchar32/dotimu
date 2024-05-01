@@ -1,6 +1,5 @@
 import numpy as np
 from warnings import warn
-import numpy as np
 
 
 def to_scalar_first(q):
@@ -207,9 +206,7 @@ def to_angles(q, scalarLast=False):
 
     References
     ----------
-    - Shuster, M. D., & Oh, S. D. (1981). Quaternion to Euler angle conversion for arbitrary
-      rotation sequence. AIAA Journal, 19(6), 838-839.
-    - pytransform3d: https://github.com/rock-learning/pytransform3d
+    - NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
     - scipy: https://www.scipy.org/
 
     """
