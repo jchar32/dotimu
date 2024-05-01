@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 import quaternions as quat
+import orientation as ori
 
 
 @dataclass
@@ -166,6 +167,39 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     return calibrated_data
 
 
+def set_frame_to_horizontal(data: dict, static_trial_num: int) -> dict:
+    reset_data = copy.deepcopy(data)
+
+    # get rotation from sensor-on-body (in segment frame) to horizontal plane
+    for s in reset_data.keys():
+        print(f"Setting frame to horizontal for {s}")
+        # get the mean of the accelerometer data for the static trial
+        static_trial = reset_data[s][static_trial_num]
+        static_accel = (
+            static_trial.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+        )
+        static_accel /= np.linalg.norm(static_accel)
+
+        # get the rotation matrix from the sensor frame to the horizontal plane
+        # R = __get_rotation_matrix_to_horizontal(static_accel)
+        R = quat.to_rotmat(quat.from_rpy(ori.static_tilt(static_accel))).T
+        # apply the rotation to all the trials
+        for i, trial in enumerate(reset_data[s]):
+            accel = trial.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
+            accel = (R @ accel.T).T
+            reset_data[s][i].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = accel
+
+            gyro = trial.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+            gyro = (R @ gyro.T).T
+            reset_data[s][i].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = gyro
+
+            if "Mag_X" in trial.columns:
+                mag = trial.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy()
+                mag = (R @ mag.T).T
+                reset_data[s][i].loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag
+    return reset_data
+
+
 def apply_sensor2body(
     model_data, s2b, accel=True, gyro=True, mag=True, quaternion=False
 ):
@@ -233,22 +267,35 @@ def apply_sensor2body(
 
 
 def get_sensor2body(trialsmap: dict, data: dict) -> dict:
-    """Obtain functional calibration matrix for each sensor. The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to). Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
+    def get_sensor2body(trialsmap, data):
+        """
+        Obtain functional calibration matrix for each sensor.
 
-    Args:
-        trialsmap (dict): maping each calibration trial to a data file number. Mandatory movements for a 7 sensor (pelvis and bilateral foot, shank, thigh) are:
-            1. Npose
-            2. Lean forward at the hips
-            3. Right leg air cycle (cycle leg as though on a bike)
-            4. Left leg air cycle (cycle leg as though on a bike)
+        The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to).
+        Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
 
-        data (dict): dict of dot sensor data with keys being the sensor locations and values being the dot objects containing the sensor dataframes.
-        valid sensor location names:
-            lfoot, rfoot, lshank, rshank, lthigh, rthigh, pelvis
+        Parameters:
+        -----------
+            trialsmap (dict): Mapping each calibration trial to a data file number. Mandatory movements for a 7 sensor (pelvis and bilateral foot, shank, thigh) are:
+                1. Npose
+                2. Lean forward at the hips
+                3. Right leg air cycle (cycle leg as though on a bike)
+                4. Left leg air cycle (cycle leg as though on a bike)
 
-    Returns:
-        dict: sensor to body calibration matrices for each sensor in same structure as data dict.
-    """
+            data (dict): Dict of dot sensor data with keys being the sensor locations and values being the dot objects containing the sensor data frames.
+                Valid sensor location names:
+                    - lfoot
+                    - rfoot
+                    - lshank
+                    - rshank
+                    - lthigh
+                    - rthigh
+                    - pelvis
+
+        Returns:
+        --------
+            dict: Sensor to body calibration matrices for each sensor in the same structure as the data dict.
+        """
 
     sensors = list(data.keys())
 
