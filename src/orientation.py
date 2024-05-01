@@ -17,10 +17,8 @@ def static_tilt(acc):
     # pitch roll estimation
     pitch_am = np.arctan2(acc[0], np.sqrt(acc[1] * acc[1] + acc[2] * acc[2]))
     roll_am = np.arctan2(acc[1], -acc[2])
-    return roll_am, pitch_am
-
-
-import numpy as np
+    rpy = np.array([roll_am, pitch_am, 0])
+    return rpy  # roll_am, pitch_am
 
 
 def yaw_from_mag(ori, m):
@@ -85,26 +83,23 @@ def complementary_filter_rpy(
     timestep=1 / 120,
     gyro_correction=True,
 ):
-    def complementary_filter_rpy(
-        acc, gyr, mag, rpy=np.array([0, 0, 0]), weight=0.985, timestep=1 / 120
-    ):
-        """
-        Perform orientation estimation (RPY) using a complementary filter approach and represent the orientation as a roll, pitch, yaw.
-        Call this function for each time-step in your data and pass the output rpy back into the function for the next time-step.
+    """
+    Perform orientation estimation (RPY) using a complementary filter approach and represent the orientation as a roll, pitch, yaw.
+    Call this function for each time-step in your data and pass the output rpy back into the function for the next time-step.
 
-        Parameters:
-        ----------
-            acc ndarray : 3x1 (channel x frame) accelerometer data
-            gyr ndarray : 3x1 (channel x frame) gyroscope data in radians per second
-            mag ndarray : 3x1 (channel x frame) magnetometer data
-            rpy ndarray : roll, pitch, yaw angles in radians (default: [0, 0, 0])
-            weight float : weight factor between 0 and 1. High weight biases the gyro data, low weight biases the accel/mag data (default: 0.985)
-            timestep float : time in seconds between each sample (e.g., inverse of sample frequency) (default: 1 / 120)
+    Parameters:
+    ----------
+        acc ndarray : 3x1 (channel x frame) accelerometer data
+        gyr ndarray : 3x1 (channel x frame) gyroscope data in radians per second
+        mag ndarray : 3x1 (channel x frame) magnetometer data
+        rpy ndarray : roll, pitch, yaw angles in radians (default: [0, 0, 0])
+        weight float : weight factor between 0 and 1. High weight biases the gyro data, low weight biases the accel/mag data (default: 0.985)
+        timestep float : time in seconds between each sample (e.g., inverse of sample frequency) (default: 1 / 120)
 
-        Returns:
-        -------
-            ndarray: newly estimated roll, pitch, yaw angles in radians
-        """
+    Returns:
+    -------
+        ndarray: newly estimated roll, pitch, yaw angles in radians
+    """
 
     # gyro integration
     if gyro_correction:
@@ -116,21 +111,16 @@ def complementary_filter_rpy(
     m = mag / np.linalg.norm(mag)
 
     # pitch roll estimation
-    roll_am, pitch_am = static_tilt(a)
-    # partial complement to be used for mag compensation
-    rpy_am_temp = (
-        np.array([roll_am, pitch_am, 0]) * (1 - weight)
-        + np.array([rpy_gyro[0], rpy_gyro[1], rpy_gyro[2]]) * weight
-    )
-    yaw_am = yaw_from_mag(rpy_am_temp, m)
+    rpy_tilt = static_tilt(a)
+    rpy_am_temp = rpy_tilt * (1 - weight) + rpy_gyro * weight
 
-    # compile accel and mag estimate
-    rpy_am = np.array([roll_am, pitch_am, yaw_am])
+    yaw_am = yaw_from_mag(rpy_am_temp, m)
+    rpy_am = rpy_tilt + np.array([0, 0, yaw_am])
 
     # full complementary
     rpy_out = rpy_gyro * weight + rpy_am * (1 - weight)
 
-    return rpy_out
+    return rpy_out, rpy_gyro, rpy_am
 
 
 def qmag_from_mag(l):
@@ -163,39 +153,15 @@ def qcomp_init(acc, mag):
     # initialize quaternion using acc and mag. Section 4 of https://doi.org/10.3390/s150819302
     # normalize acc and mag
     acc = acc / np.linalg.norm(acc)
-    mag = mag / np.linalg.norm(mag)
-
     # implement eq 25
     qa = to_quaternion_form(acc)
-    l = quat.to_rotmat(qa) @ mag  # eq 26
-    qmag = qmag_from_mag(l)
-    # l = quat.to_rotmat(qa) @ mag  # @ mag  # rotmat_from_q(qa).T @ mag  # eq 26
-
-    # gamma = l[0] ** 2 + l[1] ** 2
-
-    # # implement eq 35
-    # if l[0] >= 0:
-    #     qmag = np.array(
-    #         [
-    #             np.sqrt(gamma + l[0] * np.sqrt(gamma)) / np.sqrt(2 * gamma),
-    #             0,
-    #             0,
-    #             l[1] / (np.sqrt(2) * np.sqrt((gamma + l[0] * np.sqrt(gamma)))),
-    #         ]
-    #     )
-    # elif l[0] < 0:
-    #     qmag = np.array(
-    #         [
-    #             l[1] / (np.sqrt(2) * np.sqrt((gamma - l[0] * np.sqrt(gamma)))),
-    #             0,
-    #             0,
-    #             np.sqrt(gamma - l[0] * np.sqrt(gamma)) / np.sqrt(2 * gamma),
-    #         ]
-    #     )
-    # else:
-    #     raise ValueError("magnetic field undefined")
-
-    return quat.product(qa, qmag)  # quatmult(qa, qmag)
+    if mag is not None:
+        mag = mag / np.linalg.norm(mag)
+        l = quat.to_rotmat(qa) @ mag  # eq 26
+        qmag = qmag_from_mag(l)
+        q_init = quat.product(qa, qmag)
+    q_init = qa
+    return q_init
 
 
 def qcomp(
@@ -216,21 +182,6 @@ def qcomp(
 
     # integrate angular rate
     acc = acc / np.linalg.norm(acc)
-    mag = mag / np.linalg.norm(mag)
-
-    # eq 39 and 40
-    # angvel_sframe = np.array(
-    #     [
-    #         [
-    #             [0, gyr[0], gyr[1], gyr[2]],
-    #             [-gyr[0], 0, -gyr[2], gyr[1]],
-    #             [-gyr[1], gyr[2], 0, -gyr[0]],
-    #             [-gyr[2], -gyr[1], gyr[0], 0],
-    #         ]
-    #     ]
-    # ).squeeze()
-    # qdotg = -0.5 * angvel_sframe @ q0
-
     qdotg = -0.5 * quat.product(np.array([0, gyr[0], gyr[1], gyr[2]]), q0)  # eq 38
 
     qg = q0 + qdotg * timestep  # eq 42
@@ -243,19 +194,6 @@ def qcomp(
 
     # eq 47
     delta_qa = to_quaternion_form(pred_grav)
-    # delta_qa = np.array(
-    #     [
-    #         np.sqrt((pred_grav[2] + 1) / 2),
-    #         -pred_grav[1] / np.sqrt(2 * (pred_grav[2] + 1)),
-    #         pred_grav[0] / np.sqrt(2 * (pred_grav[2] + 1)),
-    #         0,
-    #     ]
-    # )
-
-    # pred_grav = (
-    #     quat.to_rotmat(quat.inverse(qg)).squeeze() @ acc
-    # )  # rotmat_from_q(qinv(qg)).squeeze() @ acc  # eq 44
-    # delta_qa = to_quaternion_form(pred_grav)  # eq 47
 
     # small correction to gravity prediction using either SIMPLE linear interpolation or SPHERICAL linear interpolation
     if delta_qa[0] > acc_threshold:  # simple
@@ -268,43 +206,36 @@ def qcomp(
     # implement eq 53
     qprime = quat.product(qg, delta_qa_filtered)  # quatmult(qg, delta_qa).squeeze()
 
-    # Mag correction for yaw
-    mag_world_frame = quat.to_rotmat(quat.inverse(qprime)) @ mag
-    # rotmat_from_q(qinv(qprime)).squeeze() @ mag
-    delta_qmag = qmag_from_mag(mag_world_frame)
-    # gamma_wf = mag_world_frame[0] ** 2 + mag_world_frame[1] ** 2
+    if mag is not None:
+        mag = mag / np.linalg.norm(mag)
 
-    # delta_qmag = np.array(
-    #     [
-    #         np.sqrt(gamma_wf + mag_world_frame[0] * np.sqrt(gamma_wf))
-    #         / np.sqrt(2 * gamma_wf),
-    #         0,
-    #         0,
-    #         mag_world_frame[1]
-    #         / np.sqrt(2 * (gamma_wf + mag_world_frame[0] * np.sqrt(gamma_wf))),
-    #     ]
-    # )
+        # Mag correction for yaw
+        mag_world_frame = quat.to_rotmat(quat.inverse(qprime)) @ mag
+        # rotmat_from_q(qinv(qprime)).squeeze() @ mag
+        delta_qmag = qmag_from_mag(mag_world_frame)
 
-    if delta_qmag[0] > mag_threshold:  # simple
-        delta_qmag_filtered = LERP(beta, delta_qmag, omega=None, type="simple")
-    elif delta_qmag[0] <= mag_threshold:  # Spherical
-        omega_mag = delta_qmag[0]  # np.arccos(delta_qmag[0])
-        delta_qmag_filtered = LERP(beta, delta_qmag, omega=omega_mag, type="spherical")
+        if delta_qmag[0] > mag_threshold:  # simple
+            delta_qmag_filtered = LERP(alpha, delta_qmag, omega=None, type="simple")
+        elif delta_qmag[0] <= mag_threshold:  # Spherical
+            omega_mag = delta_qmag[0]  # np.arccos(delta_qmag[0])
+            delta_qmag_filtered = LERP(
+                alpha, delta_qmag, omega=omega_mag, type="spherical"
+            )
+        q_global2local = quat.normalize(quat.product(qprime, delta_qmag_filtered))
 
-    # Corrected q based on magnetometer
-    # q_global2local = quatmult(qprime, delta_qmag)
-    q_global2local = quat.product(qprime, delta_qmag_filtered)
-    return q_global2local, pred_grav, delta_qa_filtered, delta_qmag_filtered
+    else:
+        q_global2local = quat.normalize(qprime)
+    return q_global2local
 
 
-def adaptive_gain(acc_raw, g=-9.81, static_alpha=0.01):
+def adaptive_gain(acc_raw, g=9.81, static_alpha=0.01):
     magnitude_error = np.abs((np.linalg.norm(acc_raw) - g)) / g
 
     # gain factor linear function based on Fig 5 using thresholds of 0.1-->0.2
     def gainfactor(x):
         conditions = [(x < 0.1), (x >= 0.1) & (x <= 0.2), (x > 0.2)]
         # functions = [lambda x: 1, lambda x: 10 - 10 * x, lambda x: 0]
-        functions = [lambda x: 1, lambda x: 1 - 9.85 * (x - 0.1), lambda x: 0.015]
+        functions = [lambda x: 1, lambda x: 1 - 9.5 * (x - 0.1), lambda x: 0.05]
 
         gain = np.piecewise(x, conditions, functions)
         return gain
@@ -321,7 +252,7 @@ def LERP(alpha, deltqa, omega, type="simple"):
         q_out = (np.sin((1 - alpha) * omega) / np.sin(omega)) * qI + (
             np.sin(alpha * omega) / np.sin(omega)
         ) * deltqa
-        return q_out / np.linalg.norm(q_out)
+        return quat.normalize(q_out)  # / np.linalg.norm(q_out)
     else:
         raise ValueError("type must be 'simple' or 'spherical'")
 
