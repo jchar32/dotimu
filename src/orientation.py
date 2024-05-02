@@ -2,7 +2,7 @@ import numpy as np
 import quaternions as quat
 
 
-def static_tilt(acc):
+def static_tilt(a):
     """Estimate the pitch and roll of an imu when it is assumed stationary
 
     Parameters
@@ -13,12 +13,12 @@ def static_tilt(acc):
     -------
     tuple of roll and pitch angles in radians
     """
-    acc = acc / np.linalg.norm(acc)
+    acc = a / np.linalg.norm(a)
     # pitch roll estimation
     pitch_am = np.arctan2(acc[0], np.sqrt(acc[1] * acc[1] + acc[2] * acc[2]))
     roll_am = np.arctan2(acc[1], -acc[2])
     rpy = np.array([roll_am, pitch_am, 0])
-    return rpy  # roll_am, pitch_am
+    return rpy
 
 
 def yaw_from_mag(ori, m):
@@ -115,12 +115,13 @@ def complementary_filter_rpy(
     rpy_am_temp = rpy_tilt * (1 - weight) + rpy_gyro * weight
 
     yaw_am = yaw_from_mag(rpy_am_temp, m)
-    rpy_am = rpy_tilt + np.array([0, 0, yaw_am])
+    rpy_am = -1 * np.array([rpy_tilt[0], rpy_tilt[1], yaw_am])
 
     # full complementary
+    # weight = 1 - adaptive_gain(acc)  # possible option to add adaptive gain.
     rpy_out = rpy_gyro * weight + rpy_am * (1 - weight)
 
-    return rpy_out, rpy_gyro, rpy_am
+    return rpy_out, rpy_gyro, rpy_am, weight
 
 
 def qmag_from_mag(l):
@@ -228,14 +229,14 @@ def qcomp(
     return q_global2local
 
 
-def adaptive_gain(acc_raw, g=9.81, static_alpha=0.01):
+def adaptive_gain(acc_raw, g=9.81, static_alpha=0.1):
     magnitude_error = np.abs((np.linalg.norm(acc_raw) - g)) / g
 
     # gain factor linear function based on Fig 5 using thresholds of 0.1-->0.2
     def gainfactor(x):
         conditions = [(x < 0.1), (x >= 0.1) & (x <= 0.2), (x > 0.2)]
         # functions = [lambda x: 1, lambda x: 10 - 10 * x, lambda x: 0]
-        functions = [lambda x: 1, lambda x: 1 - 9.5 * (x - 0.1), lambda x: 0.05]
+        functions = [lambda x: 0.99, lambda x: 1 - 9 * (x - 0.1), lambda x: 0.1]
 
         gain = np.piecewise(x, conditions, functions)
         return gain
