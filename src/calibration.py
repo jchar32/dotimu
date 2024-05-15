@@ -167,12 +167,13 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     return calibrated_data
 
 
-def set_frame_to_horizontal(data: dict, static_trial_num: int) -> dict:
+def set_frame_to_horizontal(data: dict, static_trial_num: int):
     reset_data = copy.deepcopy(data)
-
+    rotation_reset = {}
     # get rotation from sensor-on-body (in segment frame) to horizontal plane
     for s in reset_data.keys():
         print(f"Setting frame to horizontal for {s}")
+
         # get the mean of the accelerometer data for the static trial
         static_trial = reset_data[s][static_trial_num]
         static_accel = (
@@ -183,6 +184,7 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int) -> dict:
         # get the rotation matrix from the sensor frame to the horizontal plane
         # R = __get_rotation_matrix_to_horizontal(static_accel)
         R = quat.to_rotmat(quat.from_rpy(ori.static_tilt(static_accel))).T
+
         # apply the rotation to all the trials
         for i, trial in enumerate(reset_data[s]):
             accel = trial.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
@@ -197,7 +199,8 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int) -> dict:
                 mag = trial.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy()
                 mag = (R @ mag.T).T
                 reset_data[s][i].loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag
-    return reset_data
+        rotation_reset[s] = R
+    return reset_data, rotation_reset
 
 
 def apply_sensor2body(
@@ -316,13 +319,13 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
     for s in sensors:
         if s == "pelvis":
             continue
-        if "r" in s:
-            # temp = data[s].data[trialsmap["rcycle"]]
+        if "r" in s or "shank" in s:
+            # ?? Shank was included here to NOT flip the sign of the ML axis as the shank sensor in this experiment was placed on the anteriomedial side of both shanks while the foot and thigh were on the lateral side.
+            # TODO: add a method to choose to not flip shank for generalization.
             s2b[s][:, :] = __set_func_ml_axis(
                 data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
             )
         else:
-            # temp = data[s].data[trialsmap["lcycle"]]
             s2b[s][:, :] = __set_func_ml_axis(
                 data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
             )
@@ -371,14 +374,19 @@ def __set_func_ml_axis(data, vertical_axis, side):
     ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
 
     # flip the eigenvector if it is pointing in the wrong direction
-    if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
+    # if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
+    #     evecs *= -1
+
+    if side == "l":
         evecs *= -1
 
     # so primary axis is always in positive wrt. to the sensor frame
     # if evecs[np.argmax(np.abs(evecs[:, 0])), 0] <= 0:
     #     evecs *= -1
 
-    ml_axis = -1 * evecs[:, 0]
+    ml_axis = evecs[
+        :, 0
+    ]  # had this as -1*evecs[:,0] before...i think it doesnt make sense
 
     ap_axis = np.cross(
         ml_axis,
