@@ -73,6 +73,17 @@ def load_dot_calibrations(
         return pickle.load(f)
 
 
+def save_pickle_file(data, filename):
+    with open(filename, "wb") as f:
+        pickle.dump(data, f)
+    print(f"Data saved to {filename}")
+
+
+def load_pickle_file(filename):
+    with open(filename, "rb") as f:
+        return pickle.load(f)
+
+
 def __dot_data_indices():
     """Specify each data channel to export from the DOT sensor.
 
