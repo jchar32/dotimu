@@ -375,7 +375,7 @@ def __set_func_ml_axis(data, vertical_axis, side):
     gyr = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
     _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr, axis=0)).T))
 
-    ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
+    # ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
 
     # flip the eigenvector if it is pointing in the wrong direction
     # if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
