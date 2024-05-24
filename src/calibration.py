@@ -172,7 +172,7 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int):
     rotation_reset = {}
     # get rotation from sensor-on-body (in segment frame) to horizontal plane
     for s in reset_data.keys():
-        print(f"Setting frame to horizontal for {s}")
+        # print(f"Setting frame to horizontal for {s}")
 
         # get the mean of the accelerometer data for the static trial
         static_trial = reset_data[s][static_trial_num]
@@ -230,9 +230,9 @@ def apply_sensor2body(
         raise ValueError(
             f"Mismatch between number of sensors: {num_sensors} and number of sensor to body calibration matrices: {len(s2b.keys())}."
         )
+    print("Applying sensor to body calibration")
 
     for s in calibrated_data.keys():
-        print(f"Applying calibration to {s}")
         # check if signals are present
         accel = True and "Acc_X" in calibrated_data[s][0].columns
         gyro = True and "Gyr_X" in calibrated_data[s][0].columns
@@ -256,7 +256,11 @@ def apply_sensor2body(
                     data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]].to_numpy() @ s2b[s].T
                 )
                 data.loc[:, ["Mag_X", "Mag_Y", "Mag_Z"]] = mag_data
-
+            if eul:
+                eul_data = (
+                    data.loc[:, ["Eul_X", "Eul_Y", "Eul_Z"]].to_numpy() @ s2b[s].T
+                )
+                data.loc[:, ["Eul_X", "Eul_Y", "Eul_Z"]] = eul_data
             if quatern:
                 Rq = quat.from_rotmat(s2b[s])
                 ori = data.loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]].to_numpy()
