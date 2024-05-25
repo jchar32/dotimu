@@ -35,6 +35,7 @@ def load_dot_files(
 
     # get all sensor numbers from first element in file name string
     sensorids = sorted(list(set([f.split("_")[0] for f in files])))
+    invalid_files = {}
 
     for id in sensorids:
         # find all possible file names
@@ -49,8 +50,16 @@ def load_dot_files(
 
         # build list of dataframes for each trial
         temp = []
+        invalid_files[id] = []
         for trial_file_name in indexed_files:
-            data = read_from_csv(os.path.join(datapath, trial_file_name))
+            file_size = os.path.getsize(os.path.join(datapath, trial_file_name))
+            if (
+                file_size < 2000
+            ):  # likely original export of file failed and there is no data in it
+                data = None
+                invalid_files[id].append(trial_file_name)
+            else:
+                data = read_from_csv(os.path.join(datapath, trial_file_name))
             temp.append(data)
 
         dotdata[int(id)] = temp
