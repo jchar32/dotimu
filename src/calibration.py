@@ -501,7 +501,7 @@ def find_common_start_time(data: dict) -> dict:
     return common_stamp
 
 
-def sync_multi_dot(data: dict, syncidx: list) -> dict:
+def sync_multi_dot(data: dict, syncidx: dict) -> dict:
     """
     Synchronize multiple dot sensor data based on sync indices.
 
