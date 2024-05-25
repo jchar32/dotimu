@@ -153,6 +153,8 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     calibrated_data = copy.deepcopy(dotdata)
     for d in dotdata.keys():
         for i, data in enumerate(dotdata[d]):
+            if data is None:
+                continue
             # apply calibration
             accel2cal = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
             corrected_accel = (cal[d].matrix @ accel2cal.T).T + cal[d].accel_bias
@@ -173,7 +175,8 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int):
     # get rotation from sensor-on-body (in segment frame) to horizontal plane
     for s in reset_data.keys():
         # print(f"Setting frame to horizontal for {s}")
-
+        if reset_data[s][static_trial_num] is None:
+            continue
         # get the mean of the accelerometer data for the static trial
         static_trial = reset_data[s][static_trial_num]
         static_accel = (
@@ -233,14 +236,16 @@ def apply_sensor2body(
     print("Applying sensor to body calibration")
 
     for s in calibrated_data.keys():
-        # check if signals are present
-        accel = True and "Acc_X" in calibrated_data[s][0].columns
-        gyro = True and "Gyr_X" in calibrated_data[s][0].columns
-        mag = True and "Mag_X" in calibrated_data[s][0].columns
-        quatern = True and "Quat_X" in calibrated_data[s][0].columns
-        eul = True and "Eul_X" in calibrated_data[s][0].columns
-
         for data in calibrated_data[s]:
+            if data is None:
+                continue
+            # check if signals are present
+            accel = True and "Acc_X" in data.columns
+            gyro = True and "Gyr_X" in data.columns
+            mag = True and "Mag_X" in data.columns
+            quatern = True and "Quat_X" in data.columns
+            eul = True and "Eul_X" in data.columns
+
             if accel:
                 acc_data = (
                     data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy() @ s2b[s].T
@@ -274,53 +279,60 @@ def apply_sensor2body(
 
 
 def get_sensor2body(trialsmap: dict, data: dict) -> dict:
-    def get_sensor2body(trialsmap, data):
-        """
-        Obtain functional calibration matrix for each sensor.
+    """
+    Obtain functional calibration matrix for each sensor.
 
-        The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to).
-        Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
+    The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to).
+    Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
 
-        Parameters:
-        -----------
-            trialsmap (dict): Mapping each calibration trial to a data file number. Mandatory movements for a 7 sensor (pelvis and bilateral foot, shank, thigh) are:
-                1. Npose
-                2. Lean forward at the hips
-                3. Right leg air cycle (cycle leg as though on a bike)
-                4. Left leg air cycle (cycle leg as though on a bike)
+    Parameters:
+    -----------
+        trialsmap (dict): Mapping each calibration trial to a data file number. Mandatory movements for a 7 sensor (pelvis and bilateral foot, shank, thigh) are:
+            1. Npose
+            2. Lean forward at the hips
+            3. Right leg air cycle (cycle leg as though on a bike)
+            4. Left leg air cycle (cycle leg as though on a bike)
 
-            data (dict): Dict of dot sensor data with keys being the sensor locations and values being the dot objects containing the sensor data frames.
-                Valid sensor location names:
-                    - lfoot
-                    - rfoot
-                    - lshank
-                    - rshank
-                    - lthigh
-                    - rthigh
-                    - pelvis
+        data (dict): Dict of dot sensor data with keys being the sensor locations and values being the dot objects containing the sensor data frames.
+            Valid sensor location names:
+                - lfoot
+                - rfoot
+                - lshank
+                - rshank
+                - lthigh
+                - rthigh
+                - pelvis
 
-        Returns:
-        --------
-            dict: Sensor to body calibration matrices for each sensor in the same structure as the data dict.
-        """
+    Returns:
+    --------
+        dict: Sensor to body calibration matrices for each sensor in the same structure as the data dict.
+    """
 
     sensors = list(data.keys())
 
     s2b = {}
 
     # npose -> find gravity vector
-    nan_mat = np.full((3, 3), dtype=float, fill_value=np.nan)
+    # nan_mat = np.full((3, 3), dtype=float, fill_value=np.nan)
     for s in sensors:
-        s2b[s] = nan_mat.copy()
+        if data[s][trialsmap["npose"]] is None:
+            s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
+            continue
+        s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
         s2b[s][-1, :] = __set_vertical_axis(data[s][trialsmap["npose"]])
 
     # pelvis temp ap axis. This is used to find the ML axis
-    s2b["pelvis"][:, :] = __set_pelvis_axes(
-        data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :]
-    )
+    if data["pelvis"][trialsmap["lean"]] is not None:
+        s2b["pelvis"][:, :] = __set_pelvis_axes(
+            data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :]
+        )
 
     # Functional Calibration for lower limbs
     for s in sensors:
+        if (data[s][trialsmap["rcycle"]] is None) | (
+            data[s][trialsmap["lcycle"]] is None
+        ):
+            continue
         if s == "pelvis":
             continue
         if "r" in s or "shank" in s:
@@ -417,19 +429,73 @@ def find_common_start_time(data: dict) -> dict:
     test = np.full((len(data.keys()), num_files), np.nan)
     for j, s in enumerate(data.keys()):
         for i, trial in enumerate(data[s]):
-            test[j, i] = trial.loc[0, "SampleTimeFine"]
+            if trial is None:
+                test[j, i] = 0
+                continue
+            test[j, i] = trial.loc[0, "SampleTimeFine"]  # test is sensor by trial
 
-    latest_starttime = np.max(test, axis=0)  # the highest common timestamp
+    # the highest common timestamp across sensors for each trial
+    latest_starttime_idx = np.sort(test, axis=0)
+    stamp_exists = []
+    num_sensors, num_trials = test.shape
+    common_stamp = {t: [] for t in range(num_trials)}
+    for i in range(num_trials):
+        stamp_exists = []
 
-    # get the row index for the common time stamps for every sensor across each trial.
-    index_to_trim_start = {s: [] for s in data.keys()}
-    for s in data.keys():
-        for i, trial in enumerate(data[s]):  # range(num_files):
-            index_to_trim_start[s].append(
-                np.where(trial.loc[:, "SampleTimeFine"] == latest_starttime[i])[0][0]
-            )
+        for m in range(1, num_sensors - 1):
+            for s in data.keys():
+                if data[s][i] is None:
+                    continue
+                else:  # skip if no data
+                    stamp_exists.append(
+                        data[s][i]
+                        .loc[:, "SampleTimeFine"]
+                        .isin([latest_starttime_idx[-m][i]])
+                        .any()
+                    )
+            # print(f"m={m} {stamp_exists}")
+            if not all(stamp_exists):
+                stamp_exists = []
+                continue
+            if all(stamp_exists):
+                common_stamp[i] = latest_starttime_idx[-m][i]
+                # print("all exists")
+                break
+            else:
+                stamp_exists = []
+                continue
 
-    return index_to_trim_start
+            # timestamp_test = test[np.where(latest_starttime_idx[:, i] == m)[0][0], i]
+            # timestamp_exists = []
+            # for j, s in enumerate(data.keys()):
+            #     if data[s][i] is None:
+            #         continue
+            #     timestamp_exists.append(data[s][i].loc[:, "SampleTimeFine"].isin([timestamp_test]).any())
+
+    # # get the row index for the common time stamps for every sensor across each trial.
+    # index_to_trim_start = {s: [] for s in data.keys()}
+    # for s in data.keys():
+    #     for i, trial in enumerate(data[s]):
+    #         # print(f"{s} trial {i}")
+
+    #         if trial is None:
+    #             index_to_trim_start[s].append(np.nan)
+    #             continue
+
+    #         # // Added this loop to iter through possible good timestamps across sensors incase the latest timestamp is not found.
+    #         for m in reversed(range(latest_starttime_idx[:, i].shape[0])):
+    #             timestamp_idx_2check = np.where(latest_starttime_idx[:, i] == m)[0][0]
+    #             try:
+    #                 stamp = np.where(
+    #                     trial.loc[:, "SampleTimeFine"]
+    #                     == int(test[timestamp_idx_2check,i])
+    #                 )[0][0]
+
+    #             except IndexError:  # if the timestamp cannot be found in the trial, try next latest timestamp
+    #                 continue
+    #         index_to_trim_start[s].append(stamp)
+
+    return common_stamp
 
 
 def sync_multi_dot(data, syncidx):
@@ -437,7 +503,11 @@ def sync_multi_dot(data, syncidx):
 
     for s in syncd_data:
         for i, trial in enumerate(syncd_data[s]):
-            trimmed_data = trial.iloc[syncidx[s][i] :, :]
+            if trial is None:
+                continue
+            # trimmed_data = trial.iloc[syncidx[s][i] :, :]
+            first_row = np.where(trial.loc[:, "SampleTimeFine"] == syncidx[i])[0][0]
+            trimmed_data = trial.iloc[first_row:, :]
             trimmed_data.reset_index(inplace=True)
             syncd_data[s][i] = trimmed_data
     return syncd_data
