@@ -6,6 +6,9 @@ import pandas as pd
 
 import quaternions as quat
 import orientation as ori
+from typing import Dict, List
+import copy
+import pandas as pd
 
 
 @dataclass
@@ -278,7 +281,7 @@ def apply_sensor2body(
     return calibrated_data
 
 
-def get_sensor2body(trialsmap: dict, data: dict) -> dict:
+def get_sensor2body(trialsmap: dict, data: dict, shank_placement="anterior") -> dict:
     """
     Obtain functional calibration matrix for each sensor.
 
@@ -302,7 +305,7 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
                 - lthigh
                 - rthigh
                 - pelvis
-
+        shank_placement (str): Placement of the shank sensor. Options are "anterior" or "lateral". Defaults to "anterior". If "anterior", the shank sensor is placed on the anterior side of the shank. If "lateral", the shank sensor is placed on the lateral side of the shank. This is used to determine if the calibrated axes need to be flipped to maintain consistency of the reference frames between limbs and across sensors.
     Returns:
     --------
         dict: Sensor to body calibration matrices for each sensor in the same structure as the data dict.
@@ -312,8 +315,6 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
 
     s2b = {}
 
-    # npose -> find gravity vector
-    # nan_mat = np.full((3, 3), dtype=float, fill_value=np.nan)
     for s in sensors:
         if data[s][trialsmap["npose"]] is None:
             s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
@@ -335,16 +336,35 @@ def get_sensor2body(trialsmap: dict, data: dict) -> dict:
             continue
         if s == "pelvis":
             continue
-        if "r" in s or "shank" in s:
-            # ?? Shank was included here to NOT flip the sign of the ML axis as the shank sensor in this experiment was placed on the anteriomedial side of both shanks while the foot and thigh were on the lateral side.
-            # TODO: add a method to choose to not flip shank for generalization.
-            s2b[s][:, :] = __set_func_ml_axis(
-                data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
-            )
-        else:
-            s2b[s][:, :] = __set_func_ml_axis(
-                data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
-            )
+
+        if shank_placement == "anterior":
+            if "r" in s:
+                if "shank" in s:
+                    s2b[s][:, :] = __set_func_ml_axis(
+                        data[s][trialsmap["rcycle"]], s2b[s][-1, :], "l"
+                    )
+                else:
+                    s2b[s][:, :] = __set_func_ml_axis(
+                        data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
+                    )
+            elif "l" in s:
+                if "shank" in s:
+                    s2b[s][:, :] = __set_func_ml_axis(
+                        data[s][trialsmap["lcycle"]], s2b[s][-1, :], "r"
+                    )
+                else:
+                    s2b[s][:, :] = __set_func_ml_axis(
+                        data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
+                    )
+        elif shank_placement == "lateral":
+            if "r" in s:
+                s2b[s][:, :] = __set_func_ml_axis(
+                    data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
+                )
+            elif "l" in s:
+                s2b[s][:, :] = __set_func_ml_axis(
+                    data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
+                )
 
     return s2b
 
@@ -393,7 +413,7 @@ def __set_func_ml_axis(data, vertical_axis, side):
     # if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
     #     evecs *= -1
 
-    if side == "l":
+    if side == "r":
         evecs *= -1
 
     # so primary axis is always in positive wrt. to the sensor frame
@@ -423,6 +443,20 @@ def __flip_left_ml_axis(evecs, side):
 
 
 def find_common_start_time(data: dict) -> dict:
+    """
+    Find the highest common start time across sensors for each trial.
+
+    Parameters
+    ----------
+    data : dict
+        A dictionary containing sensor data for each trial. data[sensor][trial] contains a pandas DataFrame.
+
+    Returns
+    -------
+    dict
+        A dictionary where the keys are trial numbers and the values are the highest common start time
+        across sensors for each trial.
+    """
     num_files = len(data[list(data.keys())[0]])
 
     # collect the first time stamp for each trial on each sensor
@@ -453,61 +487,45 @@ def find_common_start_time(data: dict) -> dict:
                         .isin([latest_starttime_idx[-m][i]])
                         .any()
                     )
-            # print(f"m={m} {stamp_exists}")
             if not all(stamp_exists):
                 stamp_exists = []
                 continue
             if all(stamp_exists):
                 common_stamp[i] = latest_starttime_idx[-m][i]
-                # print("all exists")
+
                 break
             else:
                 stamp_exists = []
                 continue
 
-            # timestamp_test = test[np.where(latest_starttime_idx[:, i] == m)[0][0], i]
-            # timestamp_exists = []
-            # for j, s in enumerate(data.keys()):
-            #     if data[s][i] is None:
-            #         continue
-            #     timestamp_exists.append(data[s][i].loc[:, "SampleTimeFine"].isin([timestamp_test]).any())
-
-    # # get the row index for the common time stamps for every sensor across each trial.
-    # index_to_trim_start = {s: [] for s in data.keys()}
-    # for s in data.keys():
-    #     for i, trial in enumerate(data[s]):
-    #         # print(f"{s} trial {i}")
-
-    #         if trial is None:
-    #             index_to_trim_start[s].append(np.nan)
-    #             continue
-
-    #         # // Added this loop to iter through possible good timestamps across sensors incase the latest timestamp is not found.
-    #         for m in reversed(range(latest_starttime_idx[:, i].shape[0])):
-    #             timestamp_idx_2check = np.where(latest_starttime_idx[:, i] == m)[0][0]
-    #             try:
-    #                 stamp = np.where(
-    #                     trial.loc[:, "SampleTimeFine"]
-    #                     == int(test[timestamp_idx_2check,i])
-    #                 )[0][0]
-
-    #             except IndexError:  # if the timestamp cannot be found in the trial, try next latest timestamp
-    #                 continue
-    #         index_to_trim_start[s].append(stamp)
-
     return common_stamp
 
 
-def sync_multi_dot(data, syncidx):
+def sync_multi_dot(data: dict, syncidx: list) -> dict:
+    """
+    Synchronize multiple dot sensor data based on sync indices.
+
+    Parameters
+    ----------
+    data : dict
+        A dictionary containing dot sensor data for different trials.
+        data[sensor][trial] contains a pandas DataFrame.
+    syncidx : list
+        A list of sync indices corresponding to each trial. Values are expecte to be within the SampleTimeFine column of the dot sensor data that corresponds to the specific timestamp for syncronizing across sensors for a given trial.
+
+    Returns
+    -------
+    dict
+        A synchronized version of the dot sensor data.
+
+    """
     syncd_data = copy.deepcopy(data)
 
     for s in syncd_data:
         for i, trial in enumerate(syncd_data[s]):
             if trial is None:
                 continue
-            # trimmed_data = trial.iloc[syncidx[s][i] :, :]
-            first_row = np.where(trial.loc[:, "SampleTimeFine"] == syncidx[i])[0][0]
-            trimmed_data = trial.iloc[first_row:, :]
-            trimmed_data.reset_index(inplace=True)
+            first_row = trial.loc[:, "SampleTimeFine"].eq(syncidx[i]).idxmax()
+            trimmed_data = trial.iloc[first_row:, :].reset_index(drop=True)
             syncd_data[s][i] = trimmed_data
     return syncd_data
