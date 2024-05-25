@@ -1,5 +1,6 @@
 import numpy as np
 import quaternions as quat
+from vqf import VQF
 
 
 def static_tilt(a):
@@ -115,13 +116,19 @@ def complementary_filter_rpy(
     rpy_am_temp = rpy_tilt * (1 - weight) + rpy_gyro * weight
 
     yaw_am = yaw_from_mag(rpy_am_temp, m)
-    rpy_am = -1 * np.array([rpy_tilt[0], rpy_tilt[1], yaw_am])
+    rpy_am = np.array([rpy_tilt[0], rpy_tilt[1], yaw_am])
 
+    weight_adaptive = adaptive_gain(
+        acc, g=9.8094, static_alpha=0.1, function_form="sigmoid"
+    )
     # full complementary
-    # weight = 1 - adaptive_gain(acc)  # possible option to add adaptive gain.
+    # static
     rpy_out = rpy_gyro * weight + rpy_am * (1 - weight)
 
-    return rpy_out, rpy_gyro, rpy_am, weight
+    # adaptive
+    # rpy_out = rpy_gyro * weight_adaptive + rpy_am * (1 - weight_adaptive)
+
+    return rpy_out, rpy_gyro, rpy_am, weight_adaptive
 
 
 def qmag_from_mag(l):
@@ -176,10 +183,19 @@ def qcomp(
     acc_threshold=0.9,
     mag_threshold=0.9,
 ):
+    """
+    From Laidig 2023 (https://doi.org/10.1016/j.inffus.2022.10.014), they compared their VQF algorithm to this qcomp filter from Valenti et al (10.3390/s150819302) by doing a grid search on the tuning parameters. they found that the ideal parameters for Valenti were:
+    alpha_acc = 0.00085
+    beta_mag = 0.0005
+    a_bias = 0.00055,
+    a_adapt = False
+    beta_est = True
+    """
+
     # gyro must be in rad/s
     # acc_raw = acc.copy()  # retain unnormalized acc
     # get adaptive gain
-    alpha = adaptive_gain(acc)
+    # alpha = adaptive_gain(acc)
 
     # integrate angular rate
     acc = acc / np.linalg.norm(acc)
@@ -201,7 +217,7 @@ def qcomp(
         delta_qa_filtered = LERP(alpha, delta_qa, omega=None, type="simple")
     elif delta_qa[0] <= acc_threshold:  # Spherical
         omega_acc = delta_qa[0]  # np.arccos(delta_qa[0])
-        delta_qa_filtered = LERP(alpha, delta_qa, omega=omega_acc, type="spherical")
+        delta_qa_filtered = LERP(beta, delta_qa, omega=omega_acc, type="spherical")
 
     # Corrected q based on accelerometer
     # implement eq 53
@@ -229,19 +245,35 @@ def qcomp(
     return q_global2local
 
 
-def adaptive_gain(acc_raw, g=9.81, static_alpha=0.1):
+def adaptive_gain(acc_raw, g=9.81, static_alpha=0.1, function_form="piecewise"):
     magnitude_error = np.abs((np.linalg.norm(acc_raw) - g)) / g
 
-    # gain factor linear function based on Fig 5 using thresholds of 0.1-->0.2
-    def gainfactor(x):
-        conditions = [(x < 0.1), (x >= 0.1) & (x <= 0.2), (x > 0.2)]
-        # functions = [lambda x: 1, lambda x: 10 - 10 * x, lambda x: 0]
-        functions = [lambda x: 0.99, lambda x: 1 - 9 * (x - 0.1), lambda x: 0.1]
+    if function_form == "piecewise":
+        # gain factor linear function based on Fig 5 using thresholds of 0.1-->0.2
+        def piecewise_gain(x):
+            conditions = [(x < 0.1), (x >= 0.1) & (x <= 0.2), (x > 0.2)]
+            # functions = [lambda x: 1, lambda x: 10 - 10 * x, lambda x: 0]
+            functions = [lambda x: 0.99, lambda x: 1 - 9 * (x - 0.09), lambda x: 0.01]
 
-        gain = np.piecewise(x, conditions, functions)
-        return gain
+            gain = np.piecewise(x, conditions, functions)
+            return gain
 
-    return static_alpha * gainfactor(magnitude_error)
+        return 1 - piecewise_gain(magnitude_error)
+    elif function_form == "sigmoid":
+
+        def sigmoid_gain(x):
+            """y= a *(1 / (1 + e^(-bx - c))+f) + d"""
+            a = 0.75
+            b = 23
+            c = -5
+            d = 0.05
+            f = -0.2
+
+            return a * (1 / ((1 + np.exp(b * -x - c)) + f)) + d
+
+        return sigmoid_gain(magnitude_error)
+    else:
+        return 0.985
 
 
 def LERP(alpha, deltqa, omega, type="simple"):
@@ -283,10 +315,17 @@ def to_quaternion_form(w):
 
 
 # MAHONEY FILTER -----------------------------------------
-def mahoney(acc, gyr, mag, freq, k_P, k_I, q0, b0):
+def mahoney(acc, gyr, mag, freq, k_P, k_I, q0, b0, frame="NED"):
+    """
+    Minor adaptation from github.com/Mayitzin/ahrs. Please go look at the excellent documentation and original code by Mario Garcia.
+
+    Original algorithm derivation:
+    Robert Mahony, Tarek Hamel, and Jean-Michel Pflimlin. Nonlinear Complementary Filters on the Special Orthogonal Group. IEEE Transactions on Automatic Control, Institute of Electrical and Electronics Engineers, 2008, 53 (5), pp.1203-1217
+    """
+
     # initialize quaternion
     if q0 is None:
-        Q = am2q(acc, mag)
+        Q = am2q(acc, mag, frame=frame)
     else:
         Q = q0 / np.linalg.norm(q0)
 
@@ -299,7 +338,10 @@ def am2DCM(a, m, frame="NED"):
     H = H / np.linalg.norm(H)
     a = a / np.linalg.norm(a)
     M = np.cross(a, H)
-    return np.array([[M[0], H[0], -a[0]], [M[1], H[1], -a[1]], [M[2], H[2], -a[2]]])
+    if frame.upper() == "ENU":
+        return np.array([[H[0], M[0], a[0]], [H[1], M[1], a[1]], [H[2], M[2], a[2]]])
+    else:
+        return np.array([[M[0], H[0], -a[0]], [M[1], H[1], -a[1]], [M[2], H[2], -a[2]]])
 
 
 def updateMARG(q, gyr, acc, mag, dt, k_I=0.3, k_P=1, b0=np.zeros(3)):
@@ -316,8 +358,8 @@ def updateMARG(q, gyr, acc, mag, dt, k_I=0.3, k_P=1, b0=np.zeros(3)):
             return updateIMU(q, gyr, acc, dt, k_P, k_I, b)
 
         a = np.copy(acc) / a_norm
-        m = np.copy(mag) / a_norm
-        R = quat.to_rotmat(q)  # q2R(q)
+        m = np.copy(mag) / m_norm
+        R = quat.to_rotmat(q, homogenous=False)  # q2R(q)
         v_a = R.T @ np.array([0, 0, 1])  # expected grav
 
         # mag field to inertial frame
@@ -326,14 +368,14 @@ def updateMARG(q, gyr, acc, mag, dt, k_I=0.3, k_P=1, b0=np.zeros(3)):
         vm = v_m / np.linalg.norm(v_m)
 
         # ECF
-        omega_mes = np.cross(a, v_a) + np.cross(m, v_m)
+        omega_mes = np.cross(a, v_a) + np.cross(m, vm)
         bDot = -k_I * omega_mes
         b += bDot * dt
-        omega = omega - b + k_P * omega_mes
+        omega_corrected = omega - b + k_P * omega_mes
     else:
         return updateIMU(q, gyr, acc, dt, k_P, k_I, b)
 
-    p = np.array([0.0, *omega])
+    p = np.array([0.0, *omega_corrected])
     qDot = 0.5 * quat.product(q, p)  # quatmult(q, p).squeeze()
     q += qDot * dt
     q = q / np.linalg.norm(q)
@@ -363,3 +405,29 @@ def updateIMU(q, gyr, acc, dt, k_P, k_I, b):
 def am2q(a, m, frame="NED"):
     R = am2DCM(a, m, frame)
     return quat.from_rotmat(R)  # dcm2q(R)
+
+
+def laidig_vqf(acc, gyr, mag=None, freq=None, dt=None, filter_form="quat9D"):
+    # raise NotImplementedError("This function is not yet implemented")
+    if freq is None and dt is None:
+        raise ValueError("Must provide either frequency (freq) or time step (dt)")
+    if freq is not None:
+        dt = 1 / freq
+
+    if mag is None:
+        mag = np.zeros_like(acc)
+    vqf_filter = VQF(
+        gyrTs=dt,
+        accTs=-1,  # "-1" == same as gyr
+        magTs=-1,  # "-1" == same as gyr
+        magDistRejectionEnabled=False,
+    )
+
+    # // must be c-contiguous
+    vqf_out = vqf_filter.updateBatchFullState(
+        acc=acc.copy(order="C"),
+        gyr=gyr.copy(order="C"),
+        mag=mag.copy(order="C"),
+    )
+    vqf_quaternion = vqf_out[filter_form]
+    return vqf_quaternion
