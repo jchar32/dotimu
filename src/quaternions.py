@@ -239,6 +239,7 @@ def to_rotmat(q, scalarLast=False, homogenous=True):
     ndarray
         Rotation matrix representation of the original quaternion.
     """
+    q = normalize(q)
     if scalarLast:
         q0, qx, qy, qz = to_scalar_first(q)
     else:
