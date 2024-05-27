@@ -17,15 +17,15 @@ class Calibrations:
 
 
 def mean_dot_signals(dotdata: dict) -> dict:
-    """_summary_
+    """
+    Calculate the mean dot signals for each key in the dotdata dictionary.
 
-    Args:
-        dotdata (dict | pd.DataFrame): dict of dot objects or datarfame of dot data of samples x signals
+    Parameters:
+    dotdata (dict): A dictionary containing dot signals.
 
     Returns:
-        dict | pd.DataFrame: dict of dot objects or dataframe of dot data with the mean of each signal.
+    dict: A dictionary containing the mean dot signals for each key in dotdata.
     """
-
     temp = {}
     meandotdata = {}
     for d in dotdata.keys():
@@ -47,7 +47,9 @@ def mean_dot_signals(dotdata: dict) -> dict:
 
 
 def ideal_ori() -> np.ndarray:
-    """the orientation matrix of a perfectly calibrated accelerometer. This expects a sensor reading of + when pointing in the upward direction away from earths surface.
+    """
+    Return the orientation matrix of a perfectly calibrated accelerometer.
+    This expects a sensor reading of + when pointing in the upward direction away from earth's surface.
 
     Returns:
         np.ndarray: 3x3 matrix of the ideal orientation of the accelerometer.
@@ -69,7 +71,8 @@ def gather_calibration_data(
         "zdown": 6,
     },
 ) -> pd.DataFrame:
-    """compile individual dataframes that were collected for each calibration step.
+    """
+    compile individual dataframes that were collected for each calibration step.
 
     ASSUMPTION - Data were collected in the following order:
         bias, xup, xdown, yup, ydown, zup, zdown
@@ -78,13 +81,13 @@ def gather_calibration_data(
         Procedure should be done with sensors in a calibration box with right angles.
 
 
-    Args:
+    Parameters:
         data (dict): dict containing a single dot sensor's data for each calibration step.
         collected_order (dict): key value pairs of sensor position (e.g., xup) and the file number (e.g., 1) that it was collected in.
-        "bias" can be "None" if no bias was collected as this can be taken from any of the other positions. Retaining this option  allows for a long bias collection time if desired.
+            "bias" can be "None" if no bias was collected as this can be taken from any of the other positions. Retaining this option allows for a long bias collection time if desired.
 
     Returns:
-        pd.DataFrame: dataframe with each row correspoding to a collected calibration orientation.
+        pd.DataFrame: dataframe with each row corresponding to a collected calibration orientation.
     """
     if collected_order["bias"] is None:
         bias = pd.DataFrame(data[collected_order["xup"]]).T
@@ -115,13 +118,14 @@ def leastsquare_calibration(measured: np.ndarray, ideal: np.ndarray) -> np.ndarr
 
 
 def ori_and_bias(data: dict) -> dict:
-    """Gather the specific files for each calibration orientation (xup, yup ect) then calculate the correction matrix and bias for each sensor.
+    """
+    Gather the specific files for each calibration orientation (xup, yup, etc.) then calculate the correction matrix and bias for each sensor.
 
-    Args:
-        data (dict): dict containing a single dot sensor's data for each calibration step.
+    Parameters:
+        data (dict): A dictionary containing a single dot sensor's data for each calibration step.
 
     Returns:
-        dict: dict for each sensor with a Calibration object containing a matrix, accel_bias, and gyro_bias.
+        dict: A dictionary for each sensor with a Calibration object containing a matrix, accel_bias, and gyro_bias.
     """
     calib_data = {}
     for id in data.keys():
@@ -151,6 +155,16 @@ def ori_and_bias(data: dict) -> dict:
 
 
 def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
+    """
+    Apply sensor correction to the given dotdata using the calibration parameters.
+
+    Parameters:
+        dotdata (dict): A dictionary containing the dot data with data[sensor: str][trial: int] containing a pd.DataFrame.
+        cal (dict): A dictionary containing the calibration parameters.
+
+    Returns:
+        dict: A dictionary containing the calibrated dot data.
+    """
     calibrated_data = copy.deepcopy(dotdata)
     for d in dotdata.keys():
         for i, data in enumerate(dotdata[d]):
@@ -170,7 +184,18 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
     return calibrated_data
 
 
-def set_frame_to_horizontal(data: dict, static_trial_num: int):
+def set_frame_to_horizontal(data: dict, static_trial_num: int) -> tuple:
+    """
+    Apply rotation to align sensor data with the horizontal plane.
+
+    Parameters:
+    - data (dict): Dictionary containing sensor data with data[sensor: str][trial: int] containing a pd.DataFrame.
+    - static_trial_num (int): Index of the static trial used for alignment.
+
+    Returns:
+    - tuple: A tuple containing the modified sensor data and the rotation matrices.
+
+    """
     reset_data = copy.deepcopy(data)
     rotation_reset = {}
     # get rotation from sensor-on-body (in segment frame) to horizontal plane
@@ -188,7 +213,6 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int):
         static_accel /= np.linalg.norm(static_accel)
 
         # get the rotation matrix from the sensor frame to the horizontal plane
-
         R = quat.to_rotmat(quat.from_rpy(ori.static_tilt(static_accel))).T
 
         # apply the rotation to all the trials
@@ -289,8 +313,8 @@ def get_sensor2body(
     """
     Obtain functional calibration matrix for each sensor.
 
-    The result is a rotation matrix from the sensor frame to the body frame (the segment the dot sensor is affixed to).
-    Assumes 'data' is a dict of 7 dot sensors (pelvis and bilateral foot, shank, thigh).
+    The result is a rotation matrix from the sensor frame to the body frame (the segment the sensor is affixed to).
+    Assumes 'data' is a dict of sensors (e.g., pelvis and bilateral foot, shank, thigh).
 
     Parameters:
     -----------
@@ -400,44 +424,6 @@ def get_sensor2body(
                 UserWarning,
             )
 
-        # if shank_placement == "anterior":
-        #     if "r" in s:
-        #         if "shank" in s:
-        #             s2b[s][:, :] = __set_func_ml_axis(
-        #                 data[s][trialsmap["rcycle"]],
-        #                 s2b[s][-1, :],
-        #                 "r",
-        #                 s,
-        #                 isshank=True,
-        #             )
-
-        #         else:
-        #             s2b[s][:, :] = __set_func_ml_axis(
-        #                 data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
-        #             )
-        #     elif "l" in s:
-        #         if "shank" in s:
-        #             s2b[s][:, :] = __set_func_ml_axis(
-        #                 data[s][trialsmap["lcycle"]],
-        #                 s2b[s][-1, :],
-        #                 "r",
-        #                 s,
-        #                 isshank=True,
-        #             )
-        #         else:
-        #             s2b[s][:, :] = __set_func_ml_axis(
-        #                 data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
-        #             )
-        # elif shank_placement == "lateral":
-        #     if "r" in s:
-        #         s2b[s][:, :] = __set_func_ml_axis(
-        #             data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
-        #         )
-        #     elif "l" in s:
-        #         s2b[s][:, :] = __set_func_ml_axis(
-        #             data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
-        #         )
-
     return s2b
 
 
@@ -450,112 +436,69 @@ def __set_vertical_axis(data: np.ndarray, opposite_to_grav=True) -> np.ndarray:
         return gvec
 
 
-def __set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
-    # temp = data["pelvis"].data[trialsmap["lean"]]
-    # ap_temp = forward_lean_data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+def __set_pelvis_axes(
+    forward_lean_data: np.ndarray, pelvis_vert_axis: np.ndarray
+) -> np.ndarray:
+    """
+    Calculate the pelvis coordinate frame using the vertical axis from an N-pose and the gravity vector from a "forward lean" pose.
+    Parameters:
+    -----------
+        forward_lean_data (np.ndarray): Array of forward lean data (nx3) where n is number of samples.
+        pelvis_vert_axis (np.ndarray): Pelvis vertical axis. (1x3) unit vector for vertical axis
+
+    Returns:
+    --------
+        np.ndarray: Array containing the calculated pelvis axes.
+
+    """
     mean_ap = forward_lean_data.mean(axis=0)
     mean_ap /= np.linalg.norm(mean_ap)
 
     ml = __axis_cross_product(mean_ap, pelvis_vert_axis)
-    # ml = np.cross(ap_temp, pelvis_vert_axis)
-    # ml /= np.linalg.norm(ml)
     ap = __axis_cross_product(ml, pelvis_vert_axis)
-    # ap = np.cross(ml, pelvis_vert_axis)
-    # ap /= np.linalg.norm(ap)
     infsup = __axis_cross_product(ap, ml)
 
-    # infsup = np.cross(ap, ml)
-    # infsup /= np.linalg.norm(infsup)
     return np.vstack([ap, ml, infsup])
 
 
-def __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis):
-    # The estimated ml axis may not be pointing in the correct ml direction. To fix the axis direction so it points to the right of the body, we need to make a temporary vector from which we can use the gravity vector and the right hand rule to determine the correct direction.
-    # During the cycling motion, most of the acceleration will be vertical with some in the ap and ml. We will use this as a quick way to get an extra temporary vector.
-    # temp_cycle_accel = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    # temp_cycle_accel /= np.linalg.norm(temp_cycle_accel)
-    # ml_direc_vec = np.cross(
-    #     vertical_axis,
-    #     temp_cycle_accel,
-    # )
-    raise NotImplementedError
-    return  # ml_direc_vec
+def __set_func_ml_axis(
+    gyr: np.ndarray, vertical_axis: np.ndarray, negate_axis: bool = False
+) -> np.ndarray:
+    """
+    Set the functional ML (Medio-Lateral) axis based on the gyroscope signal variance.
 
+    Parameters:
+    -----------
+        gyr (np.ndarray): Array of gyroscope data. (nx3) where n is number of samples
+        vertical_axis (np.ndarray): Array representing the vertical axis. (1x3) unit vector for vertical axis
+        negate_axis (bool, optional): Flag to negate the ML axis. Defaults to False.
 
-def __set_func_ml_axis(gyr, vertical_axis, negate_axis=False):
-    # eigvector decomp to get gyr signal variance. Largest variance is ML axis
-
+    Returns:
+    --------
+        np.ndarray: Array representing the functional ML axis.
+    """
+    # eigvector decomp to get gyr signal variance. Largest variance corresponds to ML axis
     evals, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr, axis=0)).T))
     evec_col_idx = np.argsort(evals)[-1]
-    # ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
 
-    # flip the eigenvector if it is pointing in the wrong direction
-    # if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
-    #     evecs *= -1
-
-    # // commented out but works
-    # if (isshank and side == "r") and evecs[1, 0] < 0:
-    #     evecs[:, 0] *= -1
-    # elif (isshank and side == "l") and evecs[1, 0] > 0:
-    #     # leave as is
-    #     evecs[:, 0] *= 1
-    # elif not isshank:
-    #     if "foot" in sensorid:
-    #         if (np.argmax(np.abs(evecs[:, 0])) == 0) and (
-    #             np.abs(evecs[np.argmax(np.abs(evecs[:, 0])), 0]) > 0.9
-    #         ):
-    #             evecs[:, 0] = np.flip(evecs[:, 0])
-    #     if side == "r" and np.sign(evecs[np.argmax(np.abs(evecs[:, 0])), 0]) == -1:
-    #         evecs *= -1
-    #     if side == "l" and np.sign(evecs[np.argmax(np.abs(evecs[:, 0])), 0]) == 1:
-    #         # print(f"Left {-evecs[:,0]}")
-    #         evecs *= -1
-    # # so primary axis is always in positive wrt. to the sensor frame
-    # # if evecs[np.argmax(np.abs(evecs[:, 0])), 0] <= 0:
-    # #     evecs *= -1
-    # //
     if negate_axis:
         evecs *= -1
-    ml_axis = evecs[
-        :, evec_col_idx
-    ]  # had this as -1*evecs[:,0] before...i think it doesnt make sense
-
-    # ap_axis = np.cross(
-    #     ml_axis,
-    #     vertical_axis,
-    # )
-    # ap_axis /= np.linalg.norm(ap_axis)
-    # infsup = np.cross(ap_axis, ml_axis)
-    # infsup /= np.linalg.norm(infsup)
-    return ml_axis  # np.vstack([ap_axis, ml_axis, infsup])
+    ml_axis = evecs[:, evec_col_idx]
+    return ml_axis
 
 
-def __axis_cross_product(axis1, axis2):
+def __axis_cross_product(axis1: np.ndarray, axis2: np.ndarray) -> np.ndarray:
+    """
+    Calculate the normalized cross product of two axes.
+
+    Parameters:
+        axis1 (np.ndarray): The first axis, representing 'x' in right hand coordinate frame. (1x3)
+        axis2 (np.ndarray): The second axis, representing 'y' in right hand coordinate frame. (1x3)
+
+    Returns:
+        np.ndarray: The normalized cross product of axis1 and axis2, representing 'z' in right hand coordinate frame.
+    """
     return np.cross(axis1, axis2) / np.linalg.norm(np.cross(axis1, axis2))
-
-
-# def __set_ap_axis(ml_axis, vertical_axis):
-#     ap_axis = np.cross(
-#         ml_axis,
-#         vertical_axis,
-#     )
-#     ap_axis /= np.linalg.norm(ap_axis)
-#     return ap_axis
-
-
-# def __set_infsup_axis(ap_axis, ml_axis):
-#     infsup = np.cross(ap_axis, ml_axis)
-#     infsup /= np.linalg.norm(infsup)
-#     return infsup
-
-
-def __flip_left_ml_axis(evecs, side):
-    # TODO: remove later as this is unused.
-    # flip ML axis for left side so all axis conventions match Right to Left
-    # if side == "l" and (evecs[-1] > 0):
-    #     evecs *= -1
-    raise NotImplementedError
-    return evecs
 
 
 def find_common_start_time(data: dict) -> dict:
@@ -610,24 +553,13 @@ def find_common_start_time(data: dict) -> dict:
                 if data[s][i] is None:
                     continue
                 else:  # skip if no data
-                    # print(data[s][i].loc[:, "SampleTimeFine"].isin([stamp2test]).any())
-                    # stamp_exists[m, j] = data[s][i].loc[:, "SampleTimeFine"].isin([stamp2test]).any()
-
                     stamp_exists.append(
                         data[s][i].loc[:, "SampleTimeFine"].isin([stamp2test]).any()
                     )
 
-                    # stamp_exists[m,j]= data[s][i].loc[:, "SampleTimeFine"].isin([latest_starttime_idx[-m][i]]).any()
-
-                    # stamp_exists.append(
-                    #     data[s][i]
-                    #     .loc[:, "SampleTimeFine"]
-                    #     .isin([latest_starttime_idx[-m][i]])
-                    #     .any()
-                    # )
                     start_indices.append(data[s][i].loc[0, "SampleTimeFine"])
             stamp_exists_all.append(stamp_exists)
-            # // On a few occasions the sensors "syncd" in a way that looks right but the timestamp values are off. In this case, the timestamps values are much different and a syncing on these values isnt possible so we default to the index of 0. Here the trial is left as a blank list "[]" and when syncing in next step, if there is no value in the common_stamp, the timestamp used will just be the 0 index.
+            # // On a few occasions the sensors "syncd" in a way that looks suggests the data are right but the timestamp values are off. In this case, the timestamps values are much different and a syncing on these values isnt possible so we default to the index of 0. Here the trial is left as a blank list "[]" and when syncing in next step, if there is no value in the common_stamp, the timestamp used will just be the 0 index.
 
             if not all(stamp_exists):
                 stamp_exists = []
@@ -636,9 +568,6 @@ def find_common_start_time(data: dict) -> dict:
                 common_stamp[i] = latest_starttime_idx[-m][i]
 
             break
-            # else:
-            #     stamp_exists = []
-            #     continue
 
     return common_stamp
 
