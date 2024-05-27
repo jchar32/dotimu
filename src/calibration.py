@@ -3,12 +3,10 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+import warnings
 
 import quaternions as quat
 import orientation as ori
-from typing import Dict, List
-import copy
-import pandas as pd
 
 
 @dataclass
@@ -179,9 +177,9 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int):
     for s in reset_data.keys():
         if reset_data[s] is None:
             continue
-        # print(f"Setting frame to horizontal for {s}")
         if reset_data[s][static_trial_num] is None:
             continue
+
         # get the mean of the accelerometer data for the static trial
         static_trial = reset_data[s][static_trial_num]
         static_accel = (
@@ -190,7 +188,7 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int):
         static_accel /= np.linalg.norm(static_accel)
 
         # get the rotation matrix from the sensor frame to the horizontal plane
-        # R = __get_rotation_matrix_to_horizontal(static_accel)
+
         R = quat.to_rotmat(quat.from_rpy(ori.static_tilt(static_accel))).T
 
         # apply the rotation to all the trials
@@ -285,7 +283,9 @@ def apply_sensor2body(
     return calibrated_data
 
 
-def get_sensor2body(trialsmap: dict, data: dict, shank_placement="anterior") -> dict:
+def get_sensor2body(
+    trialsmap: dict, data: dict, shank_imu_placement="anterior"
+) -> dict:
     """
     Obtain functional calibration matrix for each sensor.
 
@@ -320,7 +320,6 @@ def get_sensor2body(trialsmap: dict, data: dict, shank_placement="anterior") -> 
     s2b = {}
 
     for s in sensors:
-        # if data[s][trialsmap["npose"]] is None:
         if data[s] is None:
             s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
             continue
@@ -336,55 +335,88 @@ def get_sensor2body(trialsmap: dict, data: dict, shank_placement="anterior") -> 
 
     # Functional Calibration for lower limbs
     for s in sensors:
-        if data[s] is None:
-            continue
-        if (data[s][trialsmap["rcycle"]] is None) | (
-            data[s][trialsmap["lcycle"]] is None
+        if (
+            data[s] is None
+            or data[s][trialsmap["rcycle"]] is None
+            or data[s][trialsmap["lcycle"]] is None
+            or s == "pelvis"
         ):
             continue
-        if s == "pelvis":
-            continue
 
-        # shank placement specified as the eigvectors give ml axes that don't make sense and handling them is a bit of a pain in the ass.
-        # TODO: all this condition work (including what is in the _set_func_ml_axis) is horrible and needs to be improved. First step is to stop worrying about generalities in the code - make this work for my situation. This means addressing each sensor on its own based on its known approximate orientation.
-        # !! one problem that seems to crop up is on two participants [7,12] the right and left foot, respectively, had issues with incorrect eigenvectors. It was returning that the x axis had the largest variance during the cycle motion which should be z for both sensors (but opposite signs). I cannot figure out why this was happening but it seems like a bug in the underlying eig() function maybe. Currently, a janky fix is to see if this happened and then reverse the eig vector for the ML axis. The results look about right.
-        if shank_placement == "anterior":
-            if "r" in s:
-                if "shank" in s:
-                    s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["rcycle"]],
-                        s2b[s][-1, :],
-                        "r",
-                        s,
-                        isshank=True,
-                    )
+        if "r" in s:
+            gyr = (
+                data[s][trialsmap["rcycle"]]
+                .loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
+                .to_numpy()
+            )
+            s2b[s][:, :] = __set_func_ml_axis(gyr, s2b[s][-1, :], negate_axis=False)
+            # Anteroposterior axis
+            s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+            # orthog inf_sup axis
+            s2b[s][-1, :] = __axis_cross_product(s2b[s][0, :], s2b[s][1, :])
 
-                else:
-                    s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
-                    )
-            elif "l" in s:
-                if "shank" in s:
-                    s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["lcycle"]],
-                        s2b[s][-1, :],
-                        "r",
-                        s,
-                        isshank=True,
-                    )
-                else:
-                    s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
-                    )
-        elif shank_placement == "lateral":
-            if "r" in s:
-                s2b[s][:, :] = __set_func_ml_axis(
-                    data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
-                )
-            elif "l" in s:
-                s2b[s][:, :] = __set_func_ml_axis(
-                    data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
-                )
+        elif "l" in s:
+            gyr = (
+                data[s][trialsmap["lcycle"]]
+                .loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
+                .to_numpy()
+            )
+            if "shank" in s and shank_imu_placement == "anterior":
+                # anterior shank imu placements do not need to their ml axis flipped.
+                s2b[s][:, :] = __set_func_ml_axis(gyr, s2b[s][-1, :], negate_axis=False)
+                # Anteroposterior axis
+                s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+                # orthog inf_sup axis
+                s2b[s][-1, :] = __axis_cross_product(s2b[s][0, :], s2b[s][1, :])
+                continue
+            s2b[s][:, :] = __set_func_ml_axis(gyr, s2b[s][-1, :], negate_axis=True)
+            # Anteroposterior axis
+            s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+            # orthog inf_sup axis
+            s2b[s][-1, :] = __axis_cross_product(s2b[s][0, :], s2b[s][1, :])
+        else:
+            warnings.warn(
+                f"Sensor{s} not attributed to side - no functional ML axis generated.",
+                UserWarning,
+            )
+
+        # if shank_placement == "anterior":
+        #     if "r" in s:
+        #         if "shank" in s:
+        #             s2b[s][:, :] = __set_func_ml_axis(
+        #                 data[s][trialsmap["rcycle"]],
+        #                 s2b[s][-1, :],
+        #                 "r",
+        #                 s,
+        #                 isshank=True,
+        #             )
+
+        #         else:
+        #             s2b[s][:, :] = __set_func_ml_axis(
+        #                 data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
+        #             )
+        #     elif "l" in s:
+        #         if "shank" in s:
+        #             s2b[s][:, :] = __set_func_ml_axis(
+        #                 data[s][trialsmap["lcycle"]],
+        #                 s2b[s][-1, :],
+        #                 "r",
+        #                 s,
+        #                 isshank=True,
+        #             )
+        #         else:
+        #             s2b[s][:, :] = __set_func_ml_axis(
+        #                 data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
+        #             )
+        # elif shank_placement == "lateral":
+        #     if "r" in s:
+        #         s2b[s][:, :] = __set_func_ml_axis(
+        #             data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
+        #         )
+        #     elif "l" in s:
+        #         s2b[s][:, :] = __set_func_ml_axis(
+        #             data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
+        #         )
 
     return s2b
 
@@ -412,19 +444,19 @@ def __set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
 def __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis):
     # The estimated ml axis may not be pointing in the correct ml direction. To fix the axis direction so it points to the right of the body, we need to make a temporary vector from which we can use the gravity vector and the right hand rule to determine the correct direction.
     # During the cycling motion, most of the acceleration will be vertical with some in the ap and ml. We will use this as a quick way to get an extra temporary vector.
-    temp_cycle_accel = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    temp_cycle_accel /= np.linalg.norm(temp_cycle_accel)
-    ml_direc_vec = np.cross(
-        vertical_axis,
-        temp_cycle_accel,
-    )
+    # temp_cycle_accel = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    # temp_cycle_accel /= np.linalg.norm(temp_cycle_accel)
+    # ml_direc_vec = np.cross(
+    #     vertical_axis,
+    #     temp_cycle_accel,
+    # )
+    raise NotImplementedError
+    return  # ml_direc_vec
 
-    return ml_direc_vec
 
-
-def __set_func_ml_axis(data, vertical_axis, side, sensorid, isshank=False):
+def __set_func_ml_axis(gyr, vertical_axis, negate_axis=False):
     # eigvector decomp to get gyr signal variance. Largest variance is ML axis
-    gyr = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+
     evals, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr, axis=0)).T))
     evec_col_idx = np.argsort(evals)[-1]
     # ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
@@ -454,7 +486,7 @@ def __set_func_ml_axis(data, vertical_axis, side, sensorid, isshank=False):
     # # if evecs[np.argmax(np.abs(evecs[:, 0])), 0] <= 0:
     # #     evecs *= -1
     # //
-    if side == "l":
+    if negate_axis:
         evecs *= -1
     ml_axis = evecs[
         :, evec_col_idx
@@ -470,11 +502,31 @@ def __set_func_ml_axis(data, vertical_axis, side, sensorid, isshank=False):
     return np.vstack([ap_axis, ml_axis, infsup])
 
 
+def __axis_cross_product(axis1, axis2):
+    return np.cross(axis1, axis2) / np.linalg.norm(np.cross(axis1, axis2))
+
+
+# def __set_ap_axis(ml_axis, vertical_axis):
+#     ap_axis = np.cross(
+#         ml_axis,
+#         vertical_axis,
+#     )
+#     ap_axis /= np.linalg.norm(ap_axis)
+#     return ap_axis
+
+
+# def __set_infsup_axis(ap_axis, ml_axis):
+#     infsup = np.cross(ap_axis, ml_axis)
+#     infsup /= np.linalg.norm(infsup)
+#     return infsup
+
+
 def __flip_left_ml_axis(evecs, side):
     # TODO: remove later as this is unused.
     # flip ML axis for left side so all axis conventions match Right to Left
-    if side == "l" and (evecs[-1] > 0):
-        evecs *= -1
+    # if side == "l" and (evecs[-1] > 0):
+    #     evecs *= -1
+    raise NotImplementedError
     return evecs
 
 
