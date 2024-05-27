@@ -177,6 +177,8 @@ def set_frame_to_horizontal(data: dict, static_trial_num: int):
     rotation_reset = {}
     # get rotation from sensor-on-body (in segment frame) to horizontal plane
     for s in reset_data.keys():
+        if reset_data[s] is None:
+            continue
         # print(f"Setting frame to horizontal for {s}")
         if reset_data[s][static_trial_num] is None:
             continue
@@ -239,6 +241,8 @@ def apply_sensor2body(
     print("Applying sensor to body calibration")
 
     for s in calibrated_data.keys():
+        if calibrated_data[s] is None:
+            continue
         for data in calibrated_data[s]:
             if data is None:
                 continue
@@ -316,20 +320,24 @@ def get_sensor2body(trialsmap: dict, data: dict, shank_placement="anterior") -> 
     s2b = {}
 
     for s in sensors:
-        if data[s][trialsmap["npose"]] is None:
+        # if data[s][trialsmap["npose"]] is None:
+        if data[s] is None:
             s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
             continue
         s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
         s2b[s][-1, :] = __set_vertical_axis(data[s][trialsmap["npose"]])
 
     # pelvis temp ap axis. This is used to find the ML axis
-    if data["pelvis"][trialsmap["lean"]] is not None:
-        s2b["pelvis"][:, :] = __set_pelvis_axes(
-            data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :]
-        )
+    if data["pelvis"] is not None:
+        if data["pelvis"][trialsmap["lean"]] is not None:
+            s2b["pelvis"][:, :] = __set_pelvis_axes(
+                data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :]
+            )
 
     # Functional Calibration for lower limbs
     for s in sensors:
+        if data[s] is None:
+            continue
         if (data[s][trialsmap["rcycle"]] is None) | (
             data[s][trialsmap["lcycle"]] is None
         ):
@@ -337,33 +345,45 @@ def get_sensor2body(trialsmap: dict, data: dict, shank_placement="anterior") -> 
         if s == "pelvis":
             continue
 
+        # shank placement specified as the eigvectors give ml axes that don't make sense and handling them is a bit of a pain in the ass.
+        # TODO: all this condition work (including what is in the _set_func_ml_axis) is horrible and needs to be improved. First step is to stop worrying about generalities in the code - make this work for my situation. This means addressing each sensor on its own based on its known approximate orientation.
+        # !! one problem that seems to crop up is on two participants [7,12] the right and left foot, respectively, had issues with incorrect eigenvectors. It was returning that the x axis had the largest variance during the cycle motion which should be z for both sensors (but opposite signs). I cannot figure out why this was happening but it seems like a bug in the underlying eig() function maybe. Currently, a janky fix is to see if this happened and then reverse the eig vector for the ML axis. The results look about right.
         if shank_placement == "anterior":
             if "r" in s:
                 if "shank" in s:
                     s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["rcycle"]], s2b[s][-1, :], "l"
+                        data[s][trialsmap["rcycle"]],
+                        s2b[s][-1, :],
+                        "r",
+                        s,
+                        isshank=True,
                     )
+
                 else:
                     s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
+                        data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
                     )
             elif "l" in s:
                 if "shank" in s:
                     s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["lcycle"]], s2b[s][-1, :], "r"
+                        data[s][trialsmap["lcycle"]],
+                        s2b[s][-1, :],
+                        "r",
+                        s,
+                        isshank=True,
                     )
                 else:
                     s2b[s][:, :] = __set_func_ml_axis(
-                        data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
+                        data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
                     )
         elif shank_placement == "lateral":
             if "r" in s:
                 s2b[s][:, :] = __set_func_ml_axis(
-                    data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r"
+                    data[s][trialsmap["rcycle"]], s2b[s][-1, :], "r", s
                 )
             elif "l" in s:
                 s2b[s][:, :] = __set_func_ml_axis(
-                    data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l"
+                    data[s][trialsmap["lcycle"]], s2b[s][-1, :], "l", s
                 )
 
     return s2b
@@ -402,26 +422,42 @@ def __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis):
     return ml_direc_vec
 
 
-def __set_func_ml_axis(data, vertical_axis, side):
+def __set_func_ml_axis(data, vertical_axis, side, sensorid, isshank=False):
     # eigvector decomp to get gyr signal variance. Largest variance is ML axis
     gyr = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
-    _, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr, axis=0)).T))
-
+    evals, evecs = np.linalg.eig(np.cov((gyr - np.mean(gyr, axis=0)).T))
+    evec_col_idx = np.argsort(evals)[-1]
     # ml_direc_vec = __find_temp_vec_4_ml_axis_dir_check(data, vertical_axis)
 
     # flip the eigenvector if it is pointing in the wrong direction
     # if not np.array_equal(np.sign(evecs[:, 0]), np.sign(ml_direc_vec)):
     #     evecs *= -1
 
-    if side == "r":
+    # // commented out but works
+    # if (isshank and side == "r") and evecs[1, 0] < 0:
+    #     evecs[:, 0] *= -1
+    # elif (isshank and side == "l") and evecs[1, 0] > 0:
+    #     # leave as is
+    #     evecs[:, 0] *= 1
+    # elif not isshank:
+    #     if "foot" in sensorid:
+    #         if (np.argmax(np.abs(evecs[:, 0])) == 0) and (
+    #             np.abs(evecs[np.argmax(np.abs(evecs[:, 0])), 0]) > 0.9
+    #         ):
+    #             evecs[:, 0] = np.flip(evecs[:, 0])
+    #     if side == "r" and np.sign(evecs[np.argmax(np.abs(evecs[:, 0])), 0]) == -1:
+    #         evecs *= -1
+    #     if side == "l" and np.sign(evecs[np.argmax(np.abs(evecs[:, 0])), 0]) == 1:
+    #         # print(f"Left {-evecs[:,0]}")
+    #         evecs *= -1
+    # # so primary axis is always in positive wrt. to the sensor frame
+    # # if evecs[np.argmax(np.abs(evecs[:, 0])), 0] <= 0:
+    # #     evecs *= -1
+    # //
+    if side == "l":
         evecs *= -1
-
-    # so primary axis is always in positive wrt. to the sensor frame
-    # if evecs[np.argmax(np.abs(evecs[:, 0])), 0] <= 0:
-    #     evecs *= -1
-
     ml_axis = evecs[
-        :, 0
+        :, evec_col_idx
     ]  # had this as -1*evecs[:,0] before...i think it doesnt make sense
 
     ap_axis = np.cross(
@@ -462,6 +498,10 @@ def find_common_start_time(data: dict) -> dict:
     # collect the first time stamp for each trial on each sensor
     test = np.full((len(data.keys()), num_files), np.nan)
     for j, s in enumerate(data.keys()):
+        if data[s] is None:
+            test[j, :] = 0
+            continue
+
         for i, trial in enumerate(data[s]):
             if trial is None:
                 test[j, i] = 0
@@ -474,29 +514,51 @@ def find_common_start_time(data: dict) -> dict:
     num_sensors, num_trials = test.shape
     common_stamp = {t: [] for t in range(num_trials)}
     for i in range(num_trials):
+        stamp_exists = np.full(
+            (latest_starttime_idx.shape[0], len(data.keys())),
+            dtype=bool,
+            fill_value=False,
+        )
         stamp_exists = []
-
-        for m in range(1, num_sensors - 1):
-            for s in data.keys():
+        start_indices = []
+        stamp_exists_all = []
+        for m in range(1, latest_starttime_idx.shape[0]):
+            stamp2test = int(latest_starttime_idx[-m][i])
+            for j, s in enumerate(data.keys()):
+                if data[s] is None:
+                    continue
                 if data[s][i] is None:
                     continue
                 else:  # skip if no data
+                    # print(data[s][i].loc[:, "SampleTimeFine"].isin([stamp2test]).any())
+                    # stamp_exists[m, j] = data[s][i].loc[:, "SampleTimeFine"].isin([stamp2test]).any()
+
                     stamp_exists.append(
-                        data[s][i]
-                        .loc[:, "SampleTimeFine"]
-                        .isin([latest_starttime_idx[-m][i]])
-                        .any()
+                        data[s][i].loc[:, "SampleTimeFine"].isin([stamp2test]).any()
                     )
+
+                    # stamp_exists[m,j]= data[s][i].loc[:, "SampleTimeFine"].isin([latest_starttime_idx[-m][i]]).any()
+
+                    # stamp_exists.append(
+                    #     data[s][i]
+                    #     .loc[:, "SampleTimeFine"]
+                    #     .isin([latest_starttime_idx[-m][i]])
+                    #     .any()
+                    # )
+                    start_indices.append(data[s][i].loc[0, "SampleTimeFine"])
+            stamp_exists_all.append(stamp_exists)
+            # // On a few occasions the sensors "syncd" in a way that looks right but the timestamp values are off. In this case, the timestamps values are much different and a syncing on these values isnt possible so we default to the index of 0. Here the trial is left as a blank list "[]" and when syncing in next step, if there is no value in the common_stamp, the timestamp used will just be the 0 index.
+
             if not all(stamp_exists):
                 stamp_exists = []
                 continue
             if all(stamp_exists):
                 common_stamp[i] = latest_starttime_idx[-m][i]
 
-                break
-            else:
-                stamp_exists = []
-                continue
+            break
+            # else:
+            #     stamp_exists = []
+            #     continue
 
     return common_stamp
 
@@ -522,10 +584,17 @@ def sync_multi_dot(data: dict, syncidx: dict) -> dict:
     syncd_data = copy.deepcopy(data)
 
     for s in syncd_data:
+        if syncd_data[s] is None:
+            continue
         for i, trial in enumerate(syncd_data[s]):
             if trial is None:
                 continue
-            first_row = trial.loc[:, "SampleTimeFine"].eq(syncidx[i]).idxmax()
+            if not syncidx[
+                i
+            ]:  # List is left empty if syncing not possible - default to idx=0
+                first_row = 0
+            else:
+                first_row = trial.loc[:, "SampleTimeFine"].eq(syncidx[i]).idxmax()
             trimmed_data = trial.iloc[first_row:, :].reset_index(drop=True)
             syncd_data[s][i] = trimmed_data
     return syncd_data
