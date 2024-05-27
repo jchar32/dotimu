@@ -143,7 +143,7 @@ def ori_and_bias(data: dict) -> dict:
         correction_matrix = X[:3, :]
         accel_bias = X[3, :]
 
-        gyro_bias = cali_data[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+        gyro_bias = cali_data.loc[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
         cal_results = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
         calib_data[id] = cal_results
 
@@ -319,18 +319,26 @@ def get_sensor2body(
 
     s2b = {}
 
+    # Identify vertical axis from gravity vector in acceleration data
     for s in sensors:
-        if data[s] is None:
-            s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
-            continue
         s2b[s] = np.full((3, 3), dtype=float, fill_value=np.nan)
-        s2b[s][-1, :] = __set_vertical_axis(data[s][trialsmap["npose"]])
+        if (data[s] is None) or (data[s][trialsmap["npose"]] is None):
+            continue
+        else:
+            s2b[s][-1, :] = __set_vertical_axis(
+                data[s][trialsmap["npose"]]
+                .loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]]
+                .to_numpy()
+            )
 
     # pelvis temp ap axis. This is used to find the ML axis
     if data["pelvis"] is not None:
         if data["pelvis"][trialsmap["lean"]] is not None:
             s2b["pelvis"][:, :] = __set_pelvis_axes(
-                data["pelvis"][trialsmap["lean"]], s2b["pelvis"][-1, :]
+                data["pelvis"][trialsmap["lean"]]
+                .loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]]
+                .to_numpy(),
+                s2b["pelvis"][-1, :],
             )
 
     # Functional Calibration for lower limbs
@@ -349,7 +357,17 @@ def get_sensor2body(
                 .loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
                 .to_numpy()
             )
-            s2b[s][:, :] = __set_func_ml_axis(gyr, s2b[s][-1, :], negate_axis=False)
+            if "shank" in s and shank_imu_placement == "anterior":
+                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                # assumes y axis points to persons right in uncalibrated data
+                if np.sign(s2b[s][1, 1]) < 0:
+                    s2b[s][1, :] *= -1
+            else:
+                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                # assumes right side uncalibrated ml axes all point to persons right (desired direction)
+                if np.sign(s2b[s][1, -1]) < 0:
+                    s2b[s][1, :] *= -1
+
             # Anteroposterior axis
             s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
             # orthog inf_sup axis
@@ -363,13 +381,15 @@ def get_sensor2body(
             )
             if "shank" in s and shank_imu_placement == "anterior":
                 # anterior shank imu placements do not need to their ml axis flipped.
-                s2b[s][:, :] = __set_func_ml_axis(gyr, s2b[s][-1, :], negate_axis=False)
-                # Anteroposterior axis
-                s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
-                # orthog inf_sup axis
-                s2b[s][-1, :] = __axis_cross_product(s2b[s][0, :], s2b[s][1, :])
-                continue
-            s2b[s][:, :] = __set_func_ml_axis(gyr, s2b[s][-1, :], negate_axis=True)
+                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                # assumes y axis points to persons right in uncalibrated data
+                if np.sign(s2b[s][1, 1]) < 0:
+                    s2b[s][1, :] *= -1
+            else:
+                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                # assumes left side uncalibrated ml axes all point to persons left (opposite of desired convention)
+                if np.sign(s2b[s][1, -1]) > 0:
+                    s2b[s][1, :] *= -1
             # Anteroposterior axis
             s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
             # orthog inf_sup axis
@@ -421,23 +441,31 @@ def get_sensor2body(
     return s2b
 
 
-def __set_vertical_axis(data):
-    gvec = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    gvec /= np.linalg.norm(gvec)
+def __set_vertical_axis(data: np.ndarray, opposite_to_grav=True) -> np.ndarray:
+    gvec = data.mean() / np.linalg.norm(data.mean())
 
-    return -1 * gvec
+    if opposite_to_grav:
+        return -1 * gvec
+    else:
+        return gvec
 
 
 def __set_pelvis_axes(forward_lean_data, pelvis_vert_axis):
     # temp = data["pelvis"].data[trialsmap["lean"]]
-    ap_temp = forward_lean_data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
-    ap_temp /= np.linalg.norm(ap_temp)
-    ml = np.cross(ap_temp, pelvis_vert_axis)
-    ml /= np.linalg.norm(ml)
-    ap = np.cross(ml, pelvis_vert_axis)
-    ap /= np.linalg.norm(ap)
-    infsup = np.cross(ap, ml)
-    infsup /= np.linalg.norm(infsup)
+    # ap_temp = forward_lean_data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].mean().to_numpy()
+    mean_ap = forward_lean_data.mean(axis=0)
+    mean_ap /= np.linalg.norm(mean_ap)
+
+    ml = __axis_cross_product(mean_ap, pelvis_vert_axis)
+    # ml = np.cross(ap_temp, pelvis_vert_axis)
+    # ml /= np.linalg.norm(ml)
+    ap = __axis_cross_product(ml, pelvis_vert_axis)
+    # ap = np.cross(ml, pelvis_vert_axis)
+    # ap /= np.linalg.norm(ap)
+    infsup = __axis_cross_product(ap, ml)
+
+    # infsup = np.cross(ap, ml)
+    # infsup /= np.linalg.norm(infsup)
     return np.vstack([ap, ml, infsup])
 
 
@@ -492,14 +520,14 @@ def __set_func_ml_axis(gyr, vertical_axis, negate_axis=False):
         :, evec_col_idx
     ]  # had this as -1*evecs[:,0] before...i think it doesnt make sense
 
-    ap_axis = np.cross(
-        ml_axis,
-        vertical_axis,
-    )
-    ap_axis /= np.linalg.norm(ap_axis)
-    infsup = np.cross(ap_axis, ml_axis)
-    infsup /= np.linalg.norm(infsup)
-    return np.vstack([ap_axis, ml_axis, infsup])
+    # ap_axis = np.cross(
+    #     ml_axis,
+    #     vertical_axis,
+    # )
+    # ap_axis /= np.linalg.norm(ap_axis)
+    # infsup = np.cross(ap_axis, ml_axis)
+    # infsup /= np.linalg.norm(infsup)
+    return ml_axis  # np.vstack([ap_axis, ml_axis, infsup])
 
 
 def __axis_cross_product(axis1, axis2):
