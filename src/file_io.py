@@ -2,7 +2,7 @@ import os
 import pickle
 import time
 from typing import Dict, List
-
+import copy
 import pandas as pd
 
 from dot import Dot
@@ -182,7 +182,10 @@ def set_dot_location_names(locations, dotdata):
     model_data = {}
     for i, j in enumerate(locations.values()):
         loc = list(locations.keys())[list(locations.values()).index(j)]
-        model_data[loc] = dotdata[j]
+        if j not in dotdata:
+            model_data[loc] = None
+            continue
+        model_data[loc] = copy.deepcopy(dotdata[j])
     return model_data
 
 
