@@ -408,7 +408,10 @@ def am2q(a, m, frame="NED"):
 
 
 def laidig_vqf(acc, gyr, mag=None, freq=None, dt=None, filter_form="quat9D"):
-    # raise NotImplementedError("This function is not yet implemented")
+    # VQF (https://vqf.readthedocs.io/en/latest/index.html)
+    # Settings:
+    # magDistRejectionEnabled set to False as it seems to be detecting disturbances at all frames
+
     if freq is None and dt is None:
         raise ValueError("Must provide either frequency (freq) or time step (dt)")
     if freq is not None:
@@ -431,3 +434,36 @@ def laidig_vqf(acc, gyr, mag=None, freq=None, dt=None, filter_form="quat9D"):
     )
     vqf_quaternion = vqf_out[filter_form]
     return vqf_quaternion
+
+
+def extract_yaw_from_quaternion(q):
+    if q.ndim > 1 and q.shape[0] > 1:
+        w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+    else:
+        w, x, y, z = q[0], q[1], q[2], q[3]
+    yaw_component = np.arctan2(2.0 * (w * z + x * y), w * w + x * x - y * y - z * z)
+    return yaw_component
+
+
+def _remove_yaw_from_quaternion(q):
+    q_yaw_euler = np.full((q.shape[0], 3), np.array([0.0, 0.0, 1.0]))
+    q_yaw_euler[:, -1] *= extract_yaw_from_quaternion(q)
+    q_yaw = quat.from_rpy(q_yaw_euler)
+    yaw_removed_q = quat.product(quat.inverse(q_yaw), q)
+    return yaw_removed_q
+
+
+def relative_angle_from_quaternion(q1, q2, remove_yaw=True, return_euler=False):
+    if remove_yaw:
+        q1_ = _remove_yaw_from_quaternion(q1)
+        q2_ = _remove_yaw_from_quaternion(q2)
+    else:
+        q1_ = q1
+        q2_ = q2
+
+    q_rel = quat.product(q1_, quat.inverse(q2_))
+
+    if return_euler:
+        return quat.to_angles(q_rel)
+    else:
+        return q_rel
