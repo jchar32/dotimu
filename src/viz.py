@@ -39,6 +39,8 @@ def plot_sensor_data(
         vertical_spacing=0.01,
     )
     for r, s in enumerate(data.keys()):
+        if data[s] is None:
+            continue
         if data[s][trial] is None:
             continue
         elif data[s][trial].shape[0] == 0:
