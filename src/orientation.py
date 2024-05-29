@@ -131,26 +131,30 @@ def complementary_filter_rpy(
     return rpy_out, rpy_gyro, rpy_am, weight_adaptive
 
 
-def qmag_from_mag(l):
-    gamma = l[0] ** 2 + l[1] ** 2  # magnitude of magnetic field in in N and U plane
+def qmag_from_mag(magfield: np.ndarray):
+    gamma = (
+        magfield[0] ** 2 + magfield[1] ** 2
+    )  # magnitude of magnetic field in in N and U plane
 
     # eq 35
-    if l[0] >= 0:
+    if magfield[0] >= 0:
         return np.array(
             [
-                np.sqrt(gamma + l[0] * np.sqrt(gamma)) / np.sqrt(2 * gamma),
+                np.sqrt(gamma + magfield[0] * np.sqrt(gamma)) / np.sqrt(2 * gamma),
                 0,
                 0,
-                l[1] / (np.sqrt(2) * np.sqrt((gamma + l[0] * np.sqrt(gamma)))),
+                magfield[1]
+                / (np.sqrt(2) * np.sqrt((gamma + magfield[0] * np.sqrt(gamma)))),
             ]
         )
-    elif l[0] < 0:
+    elif magfield[0] < 0:
         return np.array(
             [
-                l[1] / (np.sqrt(2) * np.sqrt((gamma - l[0] * np.sqrt(gamma)))),
+                magfield[1]
+                / (np.sqrt(2) * np.sqrt((gamma - magfield[0] * np.sqrt(gamma)))),
                 0,
                 0,
-                np.sqrt(gamma - l[0] * np.sqrt(gamma)) / np.sqrt(2 * gamma),
+                np.sqrt(gamma - magfield[0] * np.sqrt(gamma)) / np.sqrt(2 * gamma),
             ]
         )
     else:
@@ -165,8 +169,8 @@ def qcomp_init(acc, mag):
     qa = to_quaternion_form(acc)
     if mag is not None:
         mag = mag / np.linalg.norm(mag)
-        l = quat.to_rotmat(qa) @ mag  # eq 26
-        qmag = qmag_from_mag(l)
+        mag_field = quat.to_rotmat(qa) @ mag  # eq 26
+        qmag = qmag_from_mag(mag_field)
         q_init = quat.product(qa, qmag)
     q_init = qa
     return q_init
