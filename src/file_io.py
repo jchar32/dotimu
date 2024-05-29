@@ -5,9 +5,6 @@ from typing import Dict, List
 import copy
 import pandas as pd
 
-from dot import Dot
-from ui import get_path
-
 
 def read_from_csv(path):
     df = pd.read_csv(path, header=0)
