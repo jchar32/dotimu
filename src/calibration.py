@@ -269,11 +269,11 @@ def apply_sensor2body(
             if data is None:
                 continue
             # check if signals are present
-            accel = True and "Acc_X" in data.columns
-            gyro = True and "Gyr_X" in data.columns
-            mag = True and "Mag_X" in data.columns
-            quatern = True and "Quat_X" in data.columns
-            eul = True and "Eul_X" in data.columns
+            accel = "Acc_X" in data.columns
+            gyro = "Gyr_X" in data.columns
+            mag = "Mag_X" in data.columns
+            quatern = "Quat_X" in data.columns
+            eul = "Eul_X" in data.columns
 
             if accel:
                 acc_data = (
@@ -349,7 +349,7 @@ def get_sensor2body(
         if (data[s] is None) or (data[s][trialsmap["npose"]] is None):
             continue
         else:
-            s2b[s][-1, :] = __set_vertical_axis(
+            s2b[s][-1, :] = _set_vertical_axis(
                 data[s][trialsmap["npose"]]
                 .loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]]
                 .to_numpy()
@@ -358,7 +358,7 @@ def get_sensor2body(
     # pelvis temp ap axis. This is used to find the ML axis
     if data["pelvis"] is not None:
         if data["pelvis"][trialsmap["lean"]] is not None:
-            s2b["pelvis"][:, :] = __set_pelvis_axes(
+            s2b["pelvis"][:, :] = _set_pelvis_axes(
                 data["pelvis"][trialsmap["lean"]]
                 .loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]]
                 .to_numpy(),
@@ -382,20 +382,20 @@ def get_sensor2body(
                 .to_numpy()
             )
             if "shank" in s and shank_imu_placement == "anterior":
-                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
                 # assumes y axis points to persons right in uncalibrated data
                 if np.sign(s2b[s][1, 1]) < 0:
                     s2b[s][1, :] *= -1
             else:
-                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
                 # assumes right side uncalibrated ml axes all point to persons right (desired direction)
                 if np.sign(s2b[s][1, -1]) < 0:
                     s2b[s][1, :] *= -1
 
             # Anteroposterior axis
-            s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+            s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
             # orthog inf_sup axis
-            s2b[s][-1, :] = __axis_cross_product(s2b[s][0, :], s2b[s][1, :])
+            s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
 
         elif "l" in s:
             gyr = (
@@ -405,19 +405,19 @@ def get_sensor2body(
             )
             if "shank" in s and shank_imu_placement == "anterior":
                 # anterior shank imu placements do not need to their ml axis flipped.
-                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
                 # assumes y axis points to persons right in uncalibrated data
                 if np.sign(s2b[s][1, 1]) < 0:
                     s2b[s][1, :] *= -1
             else:
-                s2b[s][1, :] = __set_func_ml_axis(gyr, s2b[s][-1, :])
+                s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
                 # assumes left side uncalibrated ml axes all point to persons left (opposite of desired convention)
                 if np.sign(s2b[s][1, -1]) > 0:
                     s2b[s][1, :] *= -1
             # Anteroposterior axis
-            s2b[s][0, :] = __axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+            s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
             # orthog inf_sup axis
-            s2b[s][-1, :] = __axis_cross_product(s2b[s][0, :], s2b[s][1, :])
+            s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
         else:
             warnings.warn(
                 f"Sensor{s} not attributed to side - no functional ML axis generated.",
@@ -427,16 +427,16 @@ def get_sensor2body(
     return s2b
 
 
-def __set_vertical_axis(data: np.ndarray, opposite_to_grav=True) -> np.ndarray:
-    gvec = data.mean() / np.linalg.norm(data.mean())
-
+def _set_vertical_axis(data: np.ndarray, opposite_to_grav=True) -> np.ndarray:
+    gvec = data.mean(axis=0) / np.linalg.norm(data.mean(axis=0))
+    assert gvec.shape == (3,), "Gravity vector must be a 3D vector."
     if opposite_to_grav:
         return -1 * gvec
     else:
         return gvec
 
 
-def __set_pelvis_axes(
+def _set_pelvis_axes(
     forward_lean_data: np.ndarray, pelvis_vert_axis: np.ndarray
 ) -> np.ndarray:
     """
@@ -454,14 +454,14 @@ def __set_pelvis_axes(
     mean_ap = forward_lean_data.mean(axis=0)
     mean_ap /= np.linalg.norm(mean_ap)
 
-    ml = __axis_cross_product(mean_ap, pelvis_vert_axis)
-    ap = __axis_cross_product(ml, pelvis_vert_axis)
-    infsup = __axis_cross_product(ap, ml)
+    ml = _axis_cross_product(mean_ap, pelvis_vert_axis)
+    ap = _axis_cross_product(ml, pelvis_vert_axis)
+    infsup = _axis_cross_product(ap, ml)
 
     return np.vstack([ap, ml, infsup])
 
 
-def __set_func_ml_axis(
+def _set_func_ml_axis(
     gyr: np.ndarray, vertical_axis: np.ndarray, negate_axis: bool = False
 ) -> np.ndarray:
     """
@@ -487,7 +487,7 @@ def __set_func_ml_axis(
     return ml_axis
 
 
-def __axis_cross_product(axis1: np.ndarray, axis2: np.ndarray) -> np.ndarray:
+def _axis_cross_product(axis1: np.ndarray, axis2: np.ndarray) -> np.ndarray:
     """
     Calculate the normalized cross product of two axes.
 
