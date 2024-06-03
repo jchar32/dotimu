@@ -31,15 +31,17 @@ def load_dot_files(
     dotdata = {}
 
     # get all sensor numbers from first element in file name string
-    sensorids = sorted(list(set([f.split("_")[0] for f in files])))
+    sensorids = sorted(list(set([int(f.split("_")[0]) for f in files])))
+
     invalid_files = {}
 
     for id in sensorids:
+        # print(id)
         # find all possible file names
         available_files = sorted(
             [file for file in files if file.split("_")[0] == str(id)]
         )
-
+        # print(available_files)
         # filter for the files that correspond to the session trial numbers
         indexed_files = [
             available_files[i] for i in [t - 1 for t in session_trial_numbers]
@@ -79,13 +81,13 @@ def load_dot_calibrations(
         return pickle.load(f)
 
 
-def save_pickle_file(data, filename):
+def save_pickle_file(data, filename: str):
     with open(filename, "wb") as f:
         pickle.dump(data, f)
     print(f"Data saved to {filename}")
 
 
-def load_pickle_file(filename):
+def load_pickle_file(filename: str):
     with open(filename, "rb") as f:
         return pickle.load(f)
 
