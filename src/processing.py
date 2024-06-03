@@ -137,12 +137,138 @@ def time_normalize_samples(array: np.ndarray, num_samples: int) -> np.ndarray:
     if n < 1:
         raise ValueError("Must be aleast 1 signal to normalize")
 
-    normalized_array = np.zeros((num_samples, n))
+    normalized_array = np.zeros((num_samples, n), dtype=np.float64)
     for i in range(n):
         normalized_array[:, i] = np.interp(
             np.linspace(0, m, num_samples), np.arange(m), array[:, i]
         )
     return normalized_array
+
+
+def v_residual(nd_signals: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """V_residual caluclated from 1D signals normalized over some time period.
+    Implementation of eq 1-4 in MacNeilage & Glasauer 2017 Front Comp Neursci doi: 10.3389/fncom.2017.00047
+
+    Parameters
+    ----------
+    avg_signal : np.ndarray
+        ensemble mean signal over all instances of the normalized signal. shape (n,) where n= number of normalized samples
+    nd_signals : np.ndarray
+        matrix of shape (n,m) where n=normalized sample number and m=number of instances of the normalized signal
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        v_res : np.ndarray and v_exp : np.ndarray where v_res is the residual variance and v_exp is the explained variance (R2)
+
+    Raises
+    ------
+    ValueError
+        avg_signal must have 1 dimension
+        nd_signals must have 2 dimensions
+    """
+
+    avg_signal = np.nanmean(nd_signals, axis=-1)
+    vres_out = np.full(avg_signal.shape, np.nan, dtype=np.float64)
+
+    for i in range(avg_signal.shape[-1]):
+        # Use variable naming as in MacNeilage & Glasauer 2017
+        m = nd_signals[:, i, :]  # normalized waveforms in matrix
+        md = np.mean(avg_signal[:, i])  # overall mean of the signals
+        f = avg_signal[:, i]  # mean ensemble waveform
+
+        ss_tot = (1 / (m.shape[-1])) * np.sum(np.square(m - md), axis=1)
+        ss_res = (1 / (m.shape[-1])) * np.sum(np.square(m.T - f).T, axis=1)
+
+        v_res = np.divide(ss_res, ss_tot)
+        # v_exp = 1 - v_res
+        vres_out[:, i] = v_res
+    return v_res
+
+
+def waveform_summary_metrics_over_trials(
+    nd_waveforms: dict, start_trial_idx: int = 0, end_trial_idx: int | None = None
+):
+    (
+        mean_,
+        std_,
+        median_,
+        cov_,
+        vres_,
+        vres_mean_,
+        phase_sd_,
+        phase_sd_idx_,
+        odd_even_noise_,
+    ) = [[] for _ in range(9)]
+
+    for t, trial in enumerate(list(nd_waveforms.keys())):
+        data = nd_waveforms[trial][:, :, start_trial_idx:end_trial_idx]
+
+        mean_.append(np.nanmean(data, axis=-1))
+        std_.append(np.nanstd(data, axis=-1))
+        median_.append(np.nanmedian(data, axis=-1))
+        cov_.append(np.nanstd(data, axis=-1) / np.nanmean(data, axis=-1))
+        vres_.append(v_residual(data))
+        vres_mean_.append(np.nanmean(v_residual(data), axis=-1))
+
+        phi, phase_sd_waveform_, phase_sd_index_ = lewek_phase_variability(data)
+        phase_sd_.append(phase_sd_waveform_)
+        phase_sd_idx_.append(phase_sd_index_)
+        odd_even_noise_.append(
+            np.nanmean(data[:, :, 1::2], axis=-1) - np.nanmean(data[:, :, ::2], axis=-1)
+        )
+    return (
+        mean_,
+        std_,
+        median_,
+        cov_,
+        vres_,
+        vres_mean_,
+        phase_sd_,
+        phase_sd_idx_,
+        odd_even_noise_,
+    )
+
+
+def lewek_phase_variability(nd_waveforms: np.ndarray):
+    """
+    Calculate phase variability based on Lewek et al. 2006.
+
+    This function calculates the phase variability of a given set of waveforms
+    using the method described in the paper by Lewek et al. (2006). The phase
+    variability is a measure of the variability in the phase angle across the
+    gait cycle.
+
+    Parameters:
+    - nd_waveforms (np.ndarray): A 2D array of shape (n, m) representing the
+        waveforms. Each row corresponds to a different time point, and each column
+        corresponds to a different waveform.
+
+    Returns:
+    - phi (np.ndarray): A 2D array of shape (n-1, m) representing the phase angle
+        for each waveform at each time point, excluding the first time point.
+    - phi_sd (np.ndarray): A 1D array of shape (n-1,) representing the standard
+        deviation of the phase angle across the gait cycle for each waveform.
+    - phi_mean_sd (float): The mean of the phase standard deviations across all
+        waveforms, representing the overall phase variability.
+
+    References:
+    - Lewek MD, et al. (2006). Gait & Posture, 24(4), 482-492.
+        doi:10.1016/j.gaitpost.2005.06.003
+    """
+
+    theta_norm = (
+        (2 * (nd_waveforms - np.min(nd_waveforms, axis=0)))
+        / (np.max(nd_waveforms, axis=0) - np.min(nd_waveforms, axis=0))
+    ) - 1
+
+    theta_dot = np.diff(nd_waveforms, axis=0, prepend=0)
+    theta_dot_norm = theta_dot / np.max(np.abs(theta_dot), axis=0)
+    phi = np.unwrap(np.arctan2(theta_norm, theta_dot_norm), axis=0)
+    phi = phi[1:, :]
+    phi_sd = np.std(phi, axis=-1)
+    phi_mean_sd = np.mean(phi_sd)
+    return phi, phi_sd, phi_mean_sd
 
 
 def remove_discontinuity(
