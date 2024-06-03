@@ -202,7 +202,7 @@ def index_gyro_negpeaks(data: pd.DataFrame | pd.Series | np.ndarray, mlaxis: int
 
 
 def gait_events(
-    data: pd.DataFrame, method: str = "mariani", fs: int = 120, gyro_ml_axis: int = 1
+    data: pd.DataFrame, method: str = "mariani", fs: int = 120, gyro_ml_axis=1
 ):
     """main function for calculating gait events using several common algorithms.
 
@@ -220,19 +220,19 @@ def gait_events(
         data.loc[:, "Gyr_X":"Gyr_Z"], cutoff=10, fs=120, type="lowpass", order=2
     )
 
-    filtered_accel = filter_signal(
-        data.loc[:, "Acc_X":"Acc_Z"], cutoff=10, fs=120, type="lowpass", order=2
-    )
+    # filtered_accel = filter_signal(
+    #     data.loc[:, "Acc_X":"Acc_Z"], cutoff=10, fs=120, type="lowpass", order=2
+    # )
 
     # 1. get a rough estimate of swing events for segmenting the data and looking closer at individual stride events
     # 1a.detect negative peaks in gyro ml axis
     negpeak_idx, negpks_thresh, frames_between_pks = index_gyro_negpeaks(
-        filtered_gyro, mlaxis=gyro_ml_axis
+        filtered_gyro.iloc[:, gyro_ml_axis].to_numpy(), mlaxis=gyro_ml_axis
     )
 
     # 1b. detect midswing peaks
     midswing, midswing_pk_props = midswing_peak(
-        gyroml=filtered_gyro[:, gyro_ml_axis],
+        gyroml=filtered_gyro.iloc[:, gyro_ml_axis].to_numpy(),
         negpeak_idx=negpeak_idx,
         min_peak_dist=frames_between_pks,
     )
