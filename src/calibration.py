@@ -21,28 +21,17 @@ def mean_dot_signals(dotdata: dict) -> dict:
     Calculate the mean dot signals for each key in the dotdata dictionary.
 
     Parameters:
+    -----------
     dotdata (dict): A dictionary containing dot signals.
 
     Returns:
+    --------
     dict: A dictionary containing the mean dot signals for each key in dotdata.
     """
-    temp = {}
-    meandotdata = {}
+    meandotdata = {d: [] for d in dotdata.keys()}
     for d in dotdata.keys():
-        try:
-            dotdata[d].keys()
-        except AttributeError:
-            for d in dotdata.keys():
-                for filenum in range(len(dotdata[d])):
-                    temp[filenum] = dotdata[d][filenum].mean(axis=0, numeric_only=True)
-                meandotdata[d] = temp
-                temp = {}
-        else:
-            for filenum in dotdata[d].keys():
-                temp[filenum] = dotdata[d][filenum].mean(axis=0, numeric_only=True)
-            meandotdata[d] = temp
-            temp = {}
-
+        for f in dotdata[d]:
+            meandotdata[d].append(f.mean(axis=0, numeric_only=True))
     return meandotdata
 
 
@@ -52,6 +41,7 @@ def ideal_ori() -> np.ndarray:
     This expects a sensor reading of + when pointing in the upward direction away from earth's surface.
 
     Returns:
+    --------
         np.ndarray: 3x3 matrix of the ideal orientation of the accelerometer.
     """
     return np.array(
@@ -82,17 +72,19 @@ def gather_calibration_data(
 
 
     Parameters:
+    -----------
         data (dict): dict containing a single dot sensor's data for each calibration step.
         collected_order (dict): key value pairs of sensor position (e.g., xup) and the file number (e.g., 1) that it was collected in.
             "bias" can be "None" if no bias was collected as this can be taken from any of the other positions. Retaining this option allows for a long bias collection time if desired.
 
     Returns:
+    --------
         pd.DataFrame: dataframe with each row corresponding to a collected calibration orientation.
     """
     if collected_order["bias"] is None:
         bias = pd.DataFrame(data[collected_order["xup"]]).T
-
-    bias = pd.DataFrame(data[collected_order["bias"]]).T
+    else:
+        bias = pd.DataFrame(data[collected_order["bias"]]).T
     xup = pd.DataFrame(data[collected_order["xup"]]).T
     xdown = pd.DataFrame(data[collected_order["xdown"]]).T
     yup = pd.DataFrame(data[collected_order["yup"]]).T
@@ -107,11 +99,13 @@ def leastsquare_calibration(measured: np.ndarray, ideal: np.ndarray) -> np.ndarr
     """calculate the optimal correction matrix in a least square sense.
     Following  [w * wt]^-1 * w * x = y
 
-    Args:
+    Parameters:
+    -----------
         measured (np.array): 6x4 matrix of accelerometer data (xup, xdown, yup, ydown, zup, zdown) by (x ,y z,ones)
         ideal (_type_): 3x4 matrix of the ideal orientation of the accelerometer.
 
     Returns:
+    --------
         np.ndarray: correction matrix [:3,:] and bias [3,:]
     """
     return np.linalg.inv(measured.T @ measured) @ measured.T @ ideal
@@ -122,9 +116,11 @@ def ori_and_bias(data: dict) -> dict:
     Gather the specific files for each calibration orientation (xup, yup, etc.) then calculate the correction matrix and bias for each sensor.
 
     Parameters:
+    -----------
         data (dict): A dictionary containing a single dot sensor's data for each calibration step.
 
     Returns:
+    --------
         dict: A dictionary for each sensor with a Calibration object containing a matrix, accel_bias, and gyro_bias.
     """
     calib_data = {}
@@ -147,7 +143,7 @@ def ori_and_bias(data: dict) -> dict:
         correction_matrix = X[:3, :]
         accel_bias = X[3, :]
 
-        gyro_bias = cali_data.loc[["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
+        gyro_bias = cali_data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]].to_numpy()
         cal_results = Calibrations(correction_matrix, accel_bias, gyro_bias[0, :])
         calib_data[id] = cal_results
 
@@ -176,7 +172,7 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
             calibrated_data[d][i].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = corrected_accel
 
             gyro2cal = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
-            corrected_gyro = gyro2cal + cal[d].gyro_bias
+            corrected_gyro = gyro2cal - cal[d].gyro_bias
             calibrated_data[d][i].loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]] = (
                 corrected_gyro.values
             )
@@ -300,8 +296,8 @@ def apply_sensor2body(
                 ori = data.loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]].to_numpy()
 
                 # looped since product function is not vectorized
-                for i in range(ori.shape[0]):
-                    ori[i, :] = quat.product(Rq, ori[i, :])
+                # for i in range(ori.shape[0]):
+                ori = quat.product(Rq, ori)
 
                 data.loc[:, ["Quat_W", "Quat_X", "Quat_Y", "Quat_Z"]] = ori
     return calibrated_data
@@ -384,18 +380,26 @@ def get_sensor2body(
             if "shank" in s and shank_imu_placement == "anterior":
                 s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
                 # assumes y axis points to persons right in uncalibrated data
+
+                s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+                # orthog inf_sup axis
+                s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
                 if np.sign(s2b[s][1, 1]) < 0:
-                    s2b[s][1, :] *= -1
+                    s2b[s] = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]) @ s2b[s]
+                    # s2b[s][1, :] *= -1
             else:
                 s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
                 # assumes right side uncalibrated ml axes all point to persons right (desired direction)
+                s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+                # orthog inf_sup axis
+                s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
                 if np.sign(s2b[s][1, -1]) < 0:
-                    s2b[s][1, :] *= -1
-
-            # Anteroposterior axis
-            s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
-            # orthog inf_sup axis
-            s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
+                    s2b[s] = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]) @ s2b[s]
+                    # s2b[s][1, :] *= -1
+            # # Anteroposterior axis
+            # s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+            # # orthog inf_sup axis
+            # s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
 
         elif "l" in s:
             gyr = (
@@ -406,18 +410,26 @@ def get_sensor2body(
             if "shank" in s and shank_imu_placement == "anterior":
                 # anterior shank imu placements do not need to their ml axis flipped.
                 s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
+                s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+                # orthog inf_sup axis
+                s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
                 # assumes y axis points to persons right in uncalibrated data
                 if np.sign(s2b[s][1, 1]) < 0:
-                    s2b[s][1, :] *= -1
+                    s2b[s] = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]) @ s2b[s]
+                    # s2b[s][1, :] *= -1
             else:
                 s2b[s][1, :] = _set_func_ml_axis(gyr, s2b[s][-1, :])
+                s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+                # orthog inf_sup axis
+                s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
                 # assumes left side uncalibrated ml axes all point to persons left (opposite of desired convention)
                 if np.sign(s2b[s][1, -1]) > 0:
-                    s2b[s][1, :] *= -1
+                    s2b[s] = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]) @ s2b[s]
+                    # s2b[s][1, :] *= -1
             # Anteroposterior axis
-            s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
-            # orthog inf_sup axis
-            s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
+            # s2b[s][0, :] = _axis_cross_product(s2b[s][1, :], s2b[s][-1, :])
+            # # orthog inf_sup axis
+            # s2b[s][-1, :] = _axis_cross_product(s2b[s][0, :], s2b[s][1, :])
         else:
             warnings.warn(
                 f"Sensor{s} not attributed to side - no functional ML axis generated.",
