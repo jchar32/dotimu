@@ -97,7 +97,7 @@ def gather_calibration_data(
 
 def leastsquare_calibration(measured: np.ndarray, ideal: np.ndarray) -> np.ndarray:
     """calculate the optimal correction matrix in a least square sense.
-    Following  [w * wt]^-1 * w * x = y
+    Following  [wT * w]^-1 * wT * x = y
 
     Parameters:
     -----------
@@ -168,7 +168,7 @@ def apply_sensor_correction(dotdata: dict, cal: dict) -> dict:
                 continue
             # apply calibration
             accel2cal = data.loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]].to_numpy()
-            corrected_accel = (cal[d].matrix @ accel2cal.T).T + cal[d].accel_bias
+            corrected_accel = (cal[d].matrix.T @ accel2cal.T).T + cal[d].accel_bias
             calibrated_data[d][i].loc[:, ["Acc_X", "Acc_Y", "Acc_Z"]] = corrected_accel
 
             gyro2cal = data.loc[:, ["Gyr_X", "Gyr_Y", "Gyr_Z"]]
