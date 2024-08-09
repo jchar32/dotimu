@@ -131,7 +131,9 @@ def zeni():
     pass
 
 
-def midswing_peak(gyroml: np.ndarray, negpeak_idx: np.ndarray, min_peak_dist: int = 50):
+def midswing_peak(
+    gyroml: np.ndarray | pd.Series, negpeak_idx: np.ndarray, min_peak_dist: int = 50
+):
     """Detects midswing peaks in the gyro mediolateral axis signal.
 
     Args:
@@ -227,12 +229,12 @@ def gait_events(
     # 1. get a rough estimate of swing events for segmenting the data and looking closer at individual stride events
     # 1a.detect negative peaks in gyro ml axis
     negpeak_idx, negpks_thresh, frames_between_pks = index_gyro_negpeaks(
-        filtered_gyro.iloc[:, gyro_ml_axis].to_numpy(), mlaxis=gyro_ml_axis
+        filtered_gyro[:, gyro_ml_axis], mlaxis=gyro_ml_axis
     )
 
     # 1b. detect midswing peaks
     midswing, midswing_pk_props = midswing_peak(
-        gyroml=filtered_gyro.iloc[:, gyro_ml_axis].to_numpy(),
+        gyroml=filtered_gyro[:, gyro_ml_axis],
         negpeak_idx=negpeak_idx,
         min_peak_dist=frames_between_pks,
     )
