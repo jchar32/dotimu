@@ -5,8 +5,10 @@ sandbox2.ipynb
 sandbox3.py
 sandbox4.py
 main.py
+summary_analysis.py
 src/dotapi/
 data/
+deprecated/
 pychache/
 xsens/
 __pycache__/
