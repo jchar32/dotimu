@@ -68,7 +68,7 @@ def gyro_euler_conversion(rpy):
         [
             [1, np.sin(rpy[0]) * np.tan(rpy[1]), np.cos(rpy[0]) * np.tan(rpy[1])],
             [0, np.cos(rpy[0]), -np.sin(rpy[0])],
-            [0, np.sin(rpy[0]) * np.cos(rpy[1]), np.cos(rpy[0]) / np.cos(rpy[1])],
+            [0, np.sin(rpy[0]) / np.cos(rpy[1]), np.cos(rpy[0]) / np.cos(rpy[1])],
         ]
     ).T
 
@@ -471,3 +471,13 @@ def relative_angle_from_quaternion(q1, q2, remove_yaw=True, return_euler=False):
         return quat.to_angles(q_rel)
     else:
         return q_rel
+
+
+def strapdown_imu_position(gait_events, data):
+    # An python-based implementation of the strapdown inertial navigation algorithm from Gibson et al 2024 PLOS One.
+
+    # 1. ori forwards midstance to midstance
+    # 2. ori backwackwards midstance to midstance
+    # 3. strapdown correction
+    # 4. return corrected orientation.
+    pass
