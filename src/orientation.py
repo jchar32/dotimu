@@ -70,7 +70,7 @@ def gyro_euler_conversion(rpy):
             [0, np.cos(rpy[0]), -np.sin(rpy[0])],
             [0, np.sin(rpy[0]) / np.cos(rpy[1]), np.cos(rpy[0]) / np.cos(rpy[1])],
         ]
-    ).T
+    )
 
     return R
 
