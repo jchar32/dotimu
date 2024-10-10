@@ -243,31 +243,32 @@ def product(q, p, scalarLast=False):
 
 def to_angles(q, scalarLast=False):
     """
-    Returns the angles of a quaternion.
+     Returns the angles of a quaternion.
 
-    Parameters
-    ----------
-    q : ndarray
-        Quaternion assuming scalar first.
-    scalarLast : bool, optional
-        Flag indicating whether the scalar component is the last element of the quaternion.
-        Default is False.
+     Parameters
+     ----------
+     q : ndarray
+         Quaternion assuming scalar first.
+     scalarLast : bool, optional
+         Flag indicating whether the scalar component is the last element of the quaternion.
+         Default is False.
 
-    Returns
-    -------
-    ndarray
-        Angles of the quaternion in phi, theta, psi.
+     Returns
+     -------
+     ndarray
+         Angles of the quaternion in phi, theta, psi.
 
-    Notes
-    -----
-    This function calculates the angles of a quaternion using the formula from the paper
-    "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence" by Shuster and Oh.
-    The implementation is based on the pytransform3d and scipy libraries.
+     Notes
+     -----
+     This function calculates the angles of a quaternion using the formula from the paper
+     "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence" by Shuster and Oh.
+     The implementation is based on the pytransform3d and scipy libraries for XYZ sequence.
 
     References
-    ----------
-    - NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
-    - scipy: https://www.scipy.org/
+     ----------
+     - Bernardes & Viollet (2018). "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence". Journal of Aerospace Technology and Management. https://doi.org/10.1371/journal.pone.0276302
+     - NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
+     - scipy: https://www.scipy.org/
 
     """
     if q.ndim > 1:
@@ -292,7 +293,7 @@ def to_angles(q, scalarLast=False):
 def from_rpy(angles: np.ndarray, order="rpy"):
     """
     Returns the quaternion from a series of roll (about x axis), pitch (about y axis), and yaw (about z axis) angles.
-    From: NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
+
     Parameters
     ----------
     angles : ndarray
@@ -303,6 +304,12 @@ def from_rpy(angles: np.ndarray, order="rpy"):
     -------
     ndarray
         Quaternion in scalar first form.
+
+    References
+    ----------
+     - Bernardes & Viollet (2018). "Quaternion to Euler Angle Conversion for Arbitrary Rotation Sequence". Journal of Aerospace Technology and Management. https://doi.org/10.1371/journal.pone.0276302
+     - NASA Mission Planning and Analysis Division (July 1977). "Euler Angles, Quaternions, and Transformation Matrices". NASA
+     - scipy: https://www.scipy.org/
     """
     if angles.ndim > 1:
         angles = angles.T
